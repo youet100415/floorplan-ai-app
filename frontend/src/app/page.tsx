@@ -131,8 +131,29 @@ export default function EditorPage() {
   const [agentLog, setAgentLog] = useState<string[]>([]);
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([]);
   const [agentBusy, setAgentBusy] = useState(false);
-  /** 1=조닝 · 2=내부 그리기(저장) · 3=내부 적용 */
-  const [stage, setStage] = useState<1 | 2 | 3>(1);
+  /**
+   * 안 A 글로벌 워크스페이스
+   * - unit: 유닛 에디터 (독립 캔버스 · 모듈 제작/저장)
+   * - plan: 평면 완성 (조닝 → 유닛 배치)
+   */
+  type Workspace = "unit" | "plan";
+  type PlanStep = "zoning" | "place";
+  const [workspace, setWorkspace] = useState<Workspace>("plan");
+  const [planStep, setPlanStep] = useState<PlanStep>("zoning");
+  /** 레거시 호환: 1 조닝 · 2 유닛에디터 · 3 유닛배치 */
+  const stage: 1 | 2 | 3 =
+    workspace === "unit" ? 2 : planStep === "zoning" ? 1 : 3;
+  const setStage = (s: 1 | 2 | 3) => {
+    if (s === 1) {
+      setWorkspace("plan");
+      setPlanStep("zoning");
+    } else if (s === 2) {
+      setWorkspace("unit");
+    } else {
+      setWorkspace("plan");
+      setPlanStep("place");
+    }
+  };
   const [userTemplates, setUserTemplates] = useState<UnitTemplate[]>([]);
   const [interiorTool, setInteriorTool] = useState<InteriorTool>("select");
   const [interiorRoomKind, setInteriorRoomKind] = useState<RoomKind>("living");
@@ -521,7 +542,7 @@ export default function EditorPage() {
   const enterStage2 = enterStageApply;
 
   const saveAuthorToLibrary = useCallback(() => {
-    const name = authorSaveName.trim() || `내부 ${new Date().toLocaleString("ko-KR")}`;
+    const name = authorSaveName.trim() || `유닛 모듈 ${new Date().toLocaleString("ko-KR")}`;
     const tpl = planDocumentToTemplate(authorDoc, name, authorTypeHint.trim() || undefined);
     if (authorDoc.zones.length === 0 && authorDoc.openings.length === 0) {
       setError("실(존) 또는 문을 그린 뒤 저장하세요.");
@@ -536,13 +557,13 @@ export default function EditorPage() {
       {
         id: agentId(),
         role: "agent",
-        text: `라이브러리 저장: 「${tpl.name}」`,
+        text: `유닛 모듈 저장: 「${tpl.name}」`,
         details: [
           `${tpl.rooms.length}실 · 문 ${tpl.doors.length}`,
-          "「내부 적용」 탭에서 유닛에 적용하세요.",
+          "평면 완성 → 유닛 배치에서 적용하세요.",
         ],
         summaryCard: {
-          title: "Saved to Library",
+          title: "Saved to Unit Library",
           changes: [tpl.name, `${tpl.bbox.w.toFixed(1)}×${tpl.bbox.d.toFixed(1)} m`],
           unitIds: [],
         },
@@ -939,65 +960,62 @@ export default function EditorPage() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const stageTitle =
-    stage === 1
-      ? "1 · 조닝 · 동선"
-      : stage === 2
-        ? "2 · 내부 평면 그리기 · 저장"
-        : "3 · 내부 평면 적용";
-
   return (
-    <div className={`app stage-${stage}`}>
-      <header className="topbar">
+    <div className={`app workspace-${workspace} planstep-${planStep}`}>
+      <header className="topbar topbarGlobal">
         <h1>
           Floorplan<span>AI</span>
-          <em>{stageTitle}</em>
         </h1>
 
-        <nav className="stageTabs" aria-label="작업 단계">
+        {/* 글로벌: 유닛 에디터 | 평면 완성 */}
+        <nav className="globalTabs" aria-label="워크스페이스">
           <button
             type="button"
-            className={`stageTab${stage === 1 ? " on" : ""}`}
-            onClick={enterStage1}
-          >
-            <span className="stageNum">1</span>
-            조닝
-          </button>
-          <button
-            type="button"
-            className={`stageTab${stage === 2 ? " on" : ""}`}
-            title="내부 평면을 그리고 라이브러리에 저장"
+            className={`globalTab${workspace === "unit" ? " on" : ""}`}
             onClick={enterStageDraw}
+            title="방/유닛 모듈을 단독으로 그리고 저장"
           >
-            <span className="stageNum">2</span>
-            내부 그리기
+            <span className="globalTabIcon" aria-hidden>
+              ▦
+            </span>
+            <span className="globalTabText">
+              <strong>유닛 에디터</strong>
+              <em>모듈 제작 · 저장 · 학습</em>
+            </span>
           </button>
           <button
             type="button"
-            className={`stageTab${stage === 3 ? " on" : ""}`}
-            disabled={!plan}
-            title={plan ? "저장본을 유닛에 적용" : "먼저 조닝에서 평면 생성"}
-            onClick={enterStageApply}
+            className={`globalTab${workspace === "plan" ? " on" : ""}`}
+            onClick={() => {
+              setWorkspace("plan");
+              if (!plan) setPlanStep("zoning");
+            }}
+            title="건물 조닝 후 유닛 배치"
           >
-            <span className="stageNum">3</span>
-            내부 적용
+            <span className="globalTabIcon" aria-hidden>
+              ▣
+            </span>
+            <span className="globalTabText">
+              <strong>평면 완성</strong>
+              <em>조닝 · 유닛 배치</em>
+            </span>
           </button>
         </nav>
 
         <div className="topActions">
-          {stage === 1 && plan && (
+          {workspace === "unit" && (
+            <span className="scorePill">
+              라이브러리 <strong>{userTemplates.length}</strong>
+            </span>
+          )}
+          {workspace === "plan" && planStep === "zoning" && plan && (
             <span className="scorePill">
               건물 점수 <strong>{plan.score.toFixed(1)}</strong>
             </span>
           )}
-          {stage === 2 && (
+          {workspace === "plan" && planStep === "place" && plan && (
             <span className="scorePill">
-              저장본 <strong>{userTemplates.length}</strong>
-            </span>
-          )}
-          {stage === 3 && plan && (
-            <span className="scorePill">
-              적용 {Object.keys(interiors).length}/{plan.units.length}호
+              배치 {Object.keys(interiors).length}/{plan.units.length}호
               {selectedInterior?.score && (
                 <>
                   {" "}
@@ -1018,21 +1036,62 @@ export default function EditorPage() {
         </div>
       </header>
 
+      {/* 평면 완성 내부 스텝 */}
+      {workspace === "plan" && (
+        <div className="planStepBar">
+          <nav className="planSteps" aria-label="평면 완성 단계">
+            <button
+              type="button"
+              className={`planStep${planStep === "zoning" ? " on" : ""}`}
+              onClick={enterStage1}
+            >
+              <span className="stageNum">1</span>
+              조닝
+              <em>건물 구역 · 복도 · 코어</em>
+            </button>
+            <span className="planStepArrow" aria-hidden>
+              →
+            </span>
+            <button
+              type="button"
+              className={`planStep${planStep === "place" ? " on" : ""}`}
+              disabled={!plan}
+              title={plan ? "유닛 에디터 모듈을 존에 배치" : "먼저 조닝에서 평면을 생성하세요"}
+              onClick={enterStageApply}
+            >
+              <span className="stageNum">2</span>
+              유닛 배치
+              <em>라이브러리 모듈 적용</em>
+            </button>
+          </nav>
+          {plan && planStep === "zoning" && (
+            <button type="button" className="primary" onClick={enterStageApply}>
+              유닛 배치로 →
+            </button>
+          )}
+          {planStep === "place" && (
+            <button type="button" className="ghost" onClick={enterStageDraw}>
+              유닛 에디터 열기
+            </button>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="errorBar" role="alert">
           {error}
         </div>
       )}
 
-      {stage === 1 && plan && (
+      {workspace === "plan" && planStep === "zoning" && plan && (
         <div className="stageNudge">
-          <span>조닝 완료 — 내부를 그리거나, 저장본을 유닛에 적용하세요.</span>
+          <span>조닝 완료 — 유닛 에디터에서 만든 모듈을 배치하거나, 바로 유닛 배치로 이동하세요.</span>
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" onClick={enterStageDraw}>
-              내부 그리기
+              유닛 에디터
             </button>
             <button type="button" className="primary" onClick={enterStageApply}>
-              내부 적용 →
+              유닛 배치 →
             </button>
           </div>
         </div>
@@ -1144,7 +1203,7 @@ export default function EditorPage() {
         {stage === 2 ? (
           <div className="planCanvasStack">
             <div className="planToolbar">
-              <strong style={{ fontSize: 12, marginRight: 8 }}>내부 평면 작도 · Rayon 2D</strong>
+              <strong style={{ fontSize: 12, marginRight: 8 }}>유닛 에디터 · 독립 캔버스</strong>
               {(
                 [
                   ["select", "선택"],
@@ -1165,7 +1224,7 @@ export default function EditorPage() {
               ))}
               <span className="sep" />
               <em style={{ fontSize: 11, color: "var(--muted)" }}>
-                저장 후 「내부 적용」에서 유닛에 끼우기
+                저장 후 평면 완성 → 유닛 배치에서 적용
               </em>
             </div>
             <PlanDocCanvas

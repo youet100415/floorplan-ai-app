@@ -65,12 +65,12 @@ export default function InteriorApplyPanel({
     <aside className="sidebar panel interiorPanel">
       <div className="stageBanner stage2">
         <div>
-          <strong>내부 평면 적용</strong>
-          <p>저장된 내부 평면을 골라 세대에 적용합니다.</p>
+          <strong>유닛 배치 · 모듈 적용</strong>
+          <p>유닛 에디터에서 만든 모듈을 조닝 결과 세대에 끼워 넣습니다.</p>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <button type="button" className="ghost compact" onClick={onGoDraw}>
-            그리기 탭
+            유닛 에디터
           </button>
           <button type="button" className="ghost compact" onClick={onBackZoning}>
             ← 조닝
@@ -83,7 +83,7 @@ export default function InteriorApplyPanel({
           <h2>적용할 내부 평면</h2>
           {userTemplates.length === 0 && (
             <p className="note warn">
-              직접 그린 저장본이 없습니다. 「내부 그리기」 탭에서 만들고 저장하세요.
+              직접 만든 모듈이 없습니다. 「유닛 에디터」에서 그리고 저장하세요.
             </p>
           )}
           <div className="tplCards">

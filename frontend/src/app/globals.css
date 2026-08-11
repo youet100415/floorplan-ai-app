@@ -52,12 +52,114 @@ button, input, select { font: inherit; color: inherit; }
   padding: 10px 18px; border-bottom: 1px solid var(--border);
   background: var(--surface); flex: 0 0 auto;
 }
+.topbarGlobal { gap: 20px; }
 .topbar h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; }
 .topbar h1 span { color: var(--accent); }
 .topbar h1 em { margin-left: 10px; font-style: normal; font-weight: 400; font-size: 12px; color: var(--muted); }
 .topActions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 
-/* 1·2단계 전환 (영상처럼 상단 탭) */
+/* 글로벌: 유닛 에디터 | 평면 완성 */
+.globalTabs {
+  display: flex;
+  gap: 8px;
+  flex: 1 1 auto;
+  justify-content: center;
+  max-width: 560px;
+}
+.globalTab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 0;
+  margin: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--plane);
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.globalTab:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--plane));
+}
+.globalTab.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--ink);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.globalTabIcon {
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0.85;
+}
+.globalTabText { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.globalTabText strong { font-size: 13px; font-weight: 700; }
+.globalTabText em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 평면 완성 하위 스텝 */
+.planStepBar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px;
+  background: color-mix(in srgb, var(--plane) 70%, var(--surface));
+  border-bottom: 1px solid var(--border);
+}
+.planSteps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.planStep {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.planStep em {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
+}
+.planStep:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.planStep.on {
+  color: var(--ink);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.planStep.on .stageNum {
+  background: var(--accent);
+  color: #fff;
+}
+.planStep:disabled { opacity: 0.4; cursor: not-allowed; }
+.planStepArrow { color: var(--muted); font-size: 14px; padding: 0 2px; }
+
+/* 레거시 stageTabs (필요 시) */
 .stageTabs {
   display: flex;
   gap: 4px;
@@ -100,6 +202,7 @@ button, input, select { font: inherit; color: inherit; }
   font-size: 11px;
   font-weight: 700;
   background: color-mix(in srgb, var(--ink) 10%, transparent);
+  flex: 0 0 auto;
 }
 .stageTab.on .stageNum {
   background: rgba(255, 255, 255, 0.22);
@@ -197,6 +300,17 @@ button.stage2Cta {
   border-radius: 6px;
   padding: 4px 10px;
   pointer-events: none;
+  z-index: 2;
+}
+.planDrawHint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+}
+.planDocHost .ctxMenu {
+  z-index: 40;
 }
 .planZoneLabel {
   font-size: 11px;

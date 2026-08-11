@@ -64,8 +64,12 @@ export default function PlanDocCanvas({
   const [draftStart, setDraftStart] = useState<Point | null>(null);
   const [draftPoly, setDraftPoly] = useState<Point[]>([]);
   const [selection, setSelection] = useState<{ kind: string; id: string } | null>(null);
+  /** 우클릭 작도 메뉴 (호스트 기준 px) */
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const panRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const fitted = useRef(false);
+  /** 벽 연속 작도 중 추가한 벽 id — 마지막 구간 되돌리기용 */
+  const wallChainRef = useRef<string[]>([]);
 
   const wallJoin = useMemo(() => computeWallPolygons(doc.walls), [doc.walls]);
 
@@ -116,11 +120,12 @@ export default function PlanDocCanvas({
     [doc, onChange],
   );
 
-  const addWall = (a: Point, b: Point) => {
-    if (dist(a, b) < 0.05) return;
+  const addWall = (a: Point, b: Point): string | null => {
+    if (dist(a, b) < 0.05) return null;
     const storyId = doc.stories?.[0]?.id ?? "story-1";
+    const id = uid("wall");
     const wall: Wall = {
-      id: uid("wall"),
+      id,
       a: { ...a },
       b: { ...b },
       thickness: settings.wallThickness,
@@ -128,18 +133,101 @@ export default function PlanDocCanvas({
       storyId,
     };
     patchDoc((d) => ({ ...d, walls: [...d.walls, wall] }));
+    return id;
   };
 
-  const addZone = (points: Point[]) => {
-    if (points.length < 3) return;
-    const z: Zone = {
-      id: uid("zone"),
-      name: `Room ${doc.zones.length + 1}`,
-      points: points.map((p) => ({ ...p })),
-      kind: "room",
-      storyId: doc.stories?.[0]?.id,
-    };
-    patchDoc((d) => ({ ...d, zones: [...d.zones, z] }));
+  const isDrawing =
+    tool === "wall" || tool === "line" || tool === "zone"
+      ? !!(draftStart || draftPoly.length > 0)
+      : false;
+
+  const addZone = useCallback(
+    (points: Point[]) => {
+      if (points.length < 3) return;
+      const z: Zone = {
+        id: uid("zone"),
+        name: `Room ${doc.zones.length + 1}`,
+        points: points.map((p) => ({ ...p })),
+        kind: "room",
+        storyId: doc.stories?.[0]?.id,
+      };
+      patchDoc((d) => ({ ...d, zones: [...d.zones, z] }));
+    },
+    [doc.zones.length, doc.stories, patchDoc],
+  );
+
+  /** 작도 확정 — 벽: 체인 종료, 존: 폴리곤 확정 */
+  const menuConfirm = useCallback(() => {
+    if (tool === "zone" && draftPoly.length >= 3) {
+      addZone(draftPoly);
+    }
+    // 벽은 이미 클릭마다 들어가 있으므로 체인만 종료
+    setDraftStart(null);
+    setDraftPoly([]);
+    wallChainRef.current = [];
+    setCtxMenu(null);
+  }, [tool, draftPoly, addZone]);
+
+  /** 작도 전체 취소 — 이번 체인에서 올린 벽도 되돌림 */
+  const menuCancel = useCallback(() => {
+    const chain = wallChainRef.current;
+    if (chain.length > 0) {
+      const drop = new Set(chain);
+      patchDoc((d) => ({
+        ...d,
+        walls: d.walls.filter((w) => !drop.has(w.id)),
+        openings: d.openings.filter((o) => !drop.has(o.wallId)),
+      }));
+    }
+    wallChainRef.current = [];
+    setDraftStart(null);
+    setDraftPoly([]);
+    setCtxMenu(null);
+  }, [patchDoc]);
+
+  /** 마지막 점/벽 구간만 취소 */
+  const menuUndoLast = useCallback(() => {
+    if (tool === "zone" && draftPoly.length > 0) {
+      const next = draftPoly.slice(0, -1);
+      setDraftPoly(next);
+      setDraftStart(next.length ? next[next.length - 1] : null);
+      setCtxMenu(null);
+      return;
+    }
+    if ((tool === "wall" || tool === "line") && wallChainRef.current.length > 0) {
+      const chain = wallChainRef.current;
+      const lastId = chain[chain.length - 1];
+      const rest = chain.slice(0, -1);
+      wallChainRef.current = rest;
+      const lastWall = doc.walls.find((w) => w.id === lastId);
+      const prevWall =
+        rest.length > 0 ? doc.walls.find((w) => w.id === rest[rest.length - 1]) : null;
+      setDraftStart(
+        prevWall ? { ...prevWall.b } : lastWall ? { ...lastWall.a } : null,
+      );
+      patchDoc((d) => ({
+        ...d,
+        walls: d.walls.filter((w) => w.id !== lastId),
+        openings: d.openings.filter((o) => o.wallId !== lastId),
+      }));
+      setCtxMenu(null);
+      return;
+    }
+    // 벽 첫 점만 찍은 상태
+    if (draftStart && wallChainRef.current.length === 0) {
+      setDraftStart(null);
+      setCtxMenu(null);
+    }
+  }, [tool, draftPoly, draftStart, doc.walls, patchDoc]);
+
+  const openDrawMenu = (clientX: number, clientY: number) => {
+    const host = svgRef.current?.parentElement;
+    const rect = host?.getBoundingClientRect() ?? svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setCtxMenu({
+      x: Math.min(clientX - rect.left, rect.width - 180),
+      y: Math.min(clientY - rect.top, rect.height - 120),
+    });
   };
 
   const addOpeningAt = (world: Point) => {
@@ -204,6 +292,18 @@ export default function PlanDocCanvas({
       panRef.current = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy };
       return;
     }
+    // 우클릭: 작도 중이면 확인/취소 메뉴
+    if (e.button === 2) {
+      e.preventDefault();
+      if (isDrawing && !readOnly) {
+        openDrawMenu(e.clientX, e.clientY);
+      }
+      return;
+    }
+    if (ctxMenu) {
+      setCtxMenu(null);
+      return;
+    }
     if (e.button !== 0 || readOnly) return;
     const world = snapToGrid(toWorld(e), settings.snap);
 
@@ -256,9 +356,11 @@ export default function PlanDocCanvas({
     if (tool === "wall" || tool === "line") {
       if (!draftStart) {
         setDraftStart(world);
+        wallChainRef.current = [];
         return;
       }
-      addWall(draftStart, world);
+      const id = addWall(draftStart, world);
+      if (id) wallChainRef.current = [...wallChainRef.current, id];
       setDraftStart(world);
     }
   };
@@ -286,15 +388,29 @@ export default function PlanDocCanvas({
       const t = e.target as HTMLElement | null;
       if (t && ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName)) return;
       if (e.key === "Escape") {
+        if (isDrawing) {
+          menuCancel();
+          return;
+        }
         setDraftStart(null);
         setDraftPoly([]);
+        setCtxMenu(null);
       }
-      if (e.key === "Enter" && tool === "zone" && draftPoly.length >= 3) {
-        addZone(draftPoly);
-        setDraftPoly([]);
-        setDraftStart(null);
+      if (e.key === "Enter") {
+        if (isDrawing) {
+          e.preventDefault();
+          // 존 미달점이면 체인만 종료
+          if (tool === "zone" && draftPoly.length < 3) {
+            setDraftPoly([]);
+            setDraftStart(null);
+            setCtxMenu(null);
+            return;
+          }
+          menuConfirm();
+          return;
+        }
       }
-      if ((e.key === "Delete" || e.key === "Backspace") && selection) {
+      if ((e.key === "Delete" || e.key === "Backspace") && selection && !isDrawing) {
         e.preventDefault();
         removeSelected();
       }
@@ -302,6 +418,14 @@ export default function PlanDocCanvas({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  // 도구 바꾸면 드래프트·메뉴 정리 (확정 없이 체인 종료만)
+  useEffect(() => {
+    setCtxMenu(null);
+    setDraftStart(null);
+    setDraftPoly([]);
+    wallChainRef.current = [];
+  }, [tool]);
 
   const openingPlacements = doc.openings
     .map((o) => {
@@ -334,6 +458,13 @@ export default function PlanDocCanvas({
 
   const gridPx = Math.max(settings.snap * 10 * view.scale, 8);
 
+  const canConfirm =
+    tool === "zone" ? draftPoly.length >= 3 : tool === "wall" || tool === "line" ? !!draftStart : false;
+  const canUndoLast =
+    (tool === "zone" && draftPoly.length > 0) ||
+    ((tool === "wall" || tool === "line") &&
+      (wallChainRef.current.length > 0 || !!draftStart));
+
   return (
     <div className={`planDocHost ${className ?? ""}`}>
       <svg
@@ -343,8 +474,15 @@ export default function PlanDocCanvas({
         onPointerDown={onPointerDown}
         onPointerUp={endPan}
         onPointerLeave={endPan}
-        onWheel={onWheel}
-        onContextMenu={(e) => e.preventDefault()}
+        onWheel={(e) => {
+          if (ctxMenu) setCtxMenu(null);
+          onWheel(e);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isDrawing && !readOnly) openDrawMenu(e.clientX, e.clientY);
+        }}
       >
         <defs>
           <pattern
@@ -530,12 +668,62 @@ export default function PlanDocCanvas({
         <span>
           {tool} · scale {view.scale.toFixed(0)} px/m
         </span>
-        {draftStart && tool === "wall" && (
+        {draftStart && (tool === "wall" || tool === "line") && (
           <span>
             {formatMeters(dist(draftStart, cursor))} · {angleDeg(draftStart, cursor).toFixed(0)}°
+            {" · "}
+            우클릭 확인/취소
+          </span>
+        )}
+        {tool === "zone" && draftPoly.length > 0 && (
+          <span>
+            실 {draftPoly.length}점 · 우클릭 확인/취소
           </span>
         )}
       </div>
+
+      {isDrawing && !ctxMenu && (
+        <div className="drawHint planDrawHint">
+          {tool === "zone"
+            ? `실 작도 · ${draftPoly.length}점 (최소 3점)`
+            : `벽 연속 작도 · 클릭으로 이음 · 구간 ${wallChainRef.current.length}`}
+          <em>우클릭 확인/취소 · Enter 완료 · Esc 취소</em>
+        </div>
+      )}
+
+      {ctxMenu && isDrawing && (
+        <div
+          className="ctxMenu"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <button
+            type="button"
+            className="ctxOk"
+            disabled={!canConfirm && tool === "zone"}
+            onClick={menuConfirm}
+          >
+            <span className="ctxLabel">
+              {tool === "zone" ? "실 확정" : "벽 작도 완료"}
+            </span>
+            <kbd>Enter</kbd>
+          </button>
+          <button type="button" onClick={menuCancel}>
+            <span className="ctxLabel">
+              {tool === "zone" ? "작도 취소" : "이번 벽 체인 취소"}
+            </span>
+            <kbd>Esc</kbd>
+          </button>
+          <div className="ctxSep" />
+          <button type="button" disabled={!canUndoLast} onClick={menuUndoLast}>
+            <span className="ctxLabel">
+              {tool === "zone" ? "마지막 점 취소" : "마지막 구간 취소"}
+            </span>
+            <kbd>⌫</kbd>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

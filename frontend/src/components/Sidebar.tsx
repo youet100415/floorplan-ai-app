@@ -693,7 +693,7 @@ export default function Sidebar({
         </div>
         {hasPlan && onGoStage2 && (
           <button className="primary big stage2Cta" disabled={busy} onClick={onGoStage2}>
-            내부 적용 탭 →
+            유닛 배치로 →
           </button>
         )}
       </div>

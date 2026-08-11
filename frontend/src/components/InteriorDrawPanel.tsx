@@ -57,8 +57,11 @@ export default function InteriorDrawPanel({
     <aside className="sidebar panel interiorPanel">
       <div className="stageBanner stageDraw">
         <div>
-          <strong>내부 평면 그리기</strong>
-          <p>벽·실·문을 그린 뒤 저장하면, 「내부 적용」 탭에서 유닛에 끼웁니다.</p>
+          <strong>유닛 에디터 · 모듈 제작</strong>
+          <p>
+            침실 Type A, 욕실 등 유닛 모듈을 단독 캔버스에서 그리고 저장합니다. 평면
+            완성 → 유닛 배치에서 적용합니다.
+          </p>
         </div>
       </div>
 
@@ -173,9 +176,11 @@ export default function InteriorDrawPanel({
             style={{ width: "100%", marginTop: 10 }}
             onClick={onSave}
           >
-            저장 (내부 적용에서 사용)
+            모듈 저장 (유닛 배치에서 사용)
           </button>
-          <p className="note">저장본은 브라우저에 남고, 「내부 적용」 탭 목록에 표시됩니다.</p>
+          <p className="note">
+            저장본은 브라우저에 남고, 평면 완성 → 유닛 배치 목록에 표시됩니다.
+          </p>
         </section>
 
         <section>
@@ -214,7 +219,7 @@ export default function InteriorDrawPanel({
         {canGoApply && (
           <div className="actions stickyActions">
             <button type="button" className="primary big" onClick={onGoApply}>
-              내부 적용 탭으로 →
+              평면 완성 · 유닛 배치 →
             </button>
           </div>
         )}
