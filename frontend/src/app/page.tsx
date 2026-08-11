@@ -6,7 +6,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FloorCanvas, { type EditMode, type Overlays } from "@/components/FloorCanvas";
 import InteriorPanel from "@/components/InteriorPanel";
 import MetricsPanel from "@/components/MetricsPanel";
+import PlanDocCanvas from "@/components/PlanDocCanvas";
 import Sidebar from "@/components/Sidebar";
+import {
+  ensurePlanDocForUnit,
+  planDocumentToExtrudeSolids,
+  planDocumentToUnitInterior,
+  unitToPlanDocument,
+  type OpeningKind,
+  type PlanDocument,
+  type ToolId,
+} from "@/lib/plan";
 import {
   API_BASE,
   explorePlans,
@@ -127,6 +137,10 @@ export default function EditorPage() {
   const [interiorDoorWidth, setInteriorDoorWidth] = useState(0.9);
   const [interiorFurnId, setInteriorFurnId] = useState("sofa_2000");
   const [interiorDraft, setInteriorDraft] = useState<Pt[]>([]);
+  /** 유닛별 Rayon PlanDocument — 2D 편집 + 3D 압출 소스 */
+  const [planDocs, setPlanDocs] = useState<Record<string, PlanDocument>>({});
+  const [planTool, setPlanTool] = useState<ToolId>("select");
+  const [planOpeningKind, setPlanOpeningKind] = useState<OpeningKind>("door-single");
 
   const agentId = () => `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -207,6 +221,7 @@ export default function EditorPage() {
         setHighlightedUnitIds([]);
         setAgentLog([]);
         setAgentMessages([]);
+        setPlanDocs({});
         // 생성 직후에는 1단계에 머물고, 상단/하단 CTA 로 2단계 진입
         setStage(1);
       } catch (e) {
@@ -307,6 +322,17 @@ export default function EditorPage() {
         for (const u of targets) next[u.id] = fitTemplateToUnit(u, tpl);
         return next;
       });
+      // Rayon PlanDocument 동기 (3D 소스)
+      setPlanDocs((prev) => {
+        const next = { ...prev };
+        for (const u of targets) {
+          const it = fitTemplateToUnit(u, tpl);
+          next[u.id] = unitToPlanDocument(u, it, {
+            wallThickness: params.wall_thickness_external || 0.2,
+          });
+        }
+        return next;
+      });
       setOverlays((o) => ({ ...o, interiors: true, zones: true }));
       setHighlightedUnitIds(targets.map((u) => u.id));
       setAgentLog((logs) => [
@@ -316,7 +342,7 @@ export default function EditorPage() {
       setError(null);
       window.setTimeout(() => setHighlightedUnitIds([]), 2200);
     },
-    [plan, selectedId, selectedUnitIds, userTemplates],
+    [plan, selectedId, selectedUnitIds, userTemplates, params.wall_thickness_external],
   );
 
   const applyAutoInteriors = useCallback(() => {
@@ -326,11 +352,20 @@ export default function EditorPage() {
     }
     const next = autoFitAll(plan.units, pickTemplateForType);
     setInteriors(next);
+    setPlanDocs(() => {
+      const docs: Record<string, PlanDocument> = {};
+      for (const u of plan.units) {
+        docs[u.id] = unitToPlanDocument(u, next[u.id], {
+          wallThickness: params.wall_thickness_external || 0.2,
+        });
+      }
+      return docs;
+    });
     setOverlays((o) => ({ ...o, interiors: true, zones: true }));
     setHighlightedUnitIds(plan.units.map((u) => u.id));
     setAgentLog((logs) => [`타입별 자동 템플릿 ${plan.units.length}호 적용`, ...logs].slice(0, 12));
     window.setTimeout(() => setHighlightedUnitIds([]), 2200);
-  }, [plan]);
+  }, [plan, params.wall_thickness_external]);
 
   const clearInteriors = useCallback(() => {
     setInteriors({});
@@ -385,6 +420,50 @@ export default function EditorPage() {
   );
 
   const selectedInterior = selectedId ? interiors[selectedId] : null;
+  const selectedUnit = plan && selectedId ? plan.units.find((u) => u.id === selectedId) ?? null : null;
+  const selectedPlanDoc = selectedId ? planDocs[selectedId] : undefined;
+
+  /** PlanDocument 편집 → UnitInterior + 3D 스펙 동기화 */
+  const updatePlanDoc = useCallback(
+    (unitId: string, doc: PlanDocument) => {
+      if (!plan) return;
+      const unit = plan.units.find((u) => u.id === unitId);
+      if (!unit) return;
+      setPlanDocs((prev) => ({ ...prev, [unitId]: doc }));
+      const nextInterior = planDocumentToUnitInterior(unit, doc);
+      setInteriors((prev) => ({ ...prev, [unitId]: nextInterior }));
+      setOverlays((o) => ({ ...o, interiors: true, zones: true }));
+      // 3D 연동 준비: 콘솔/추후 API — solids 개수만 로깅
+      if (typeof window !== "undefined" && (window as unknown as { __FP_DEBUG_3D?: boolean }).__FP_DEBUG_3D) {
+        console.debug("[3d-solids]", unitId, planDocumentToExtrudeSolids(doc).length);
+      }
+    },
+    [plan],
+  );
+
+  /** 유닛 선택 시 PlanDocument 보장 */
+  useEffect(() => {
+    if (stage !== 2 || !plan || !selectedId) return;
+    const unit = plan.units.find((u) => u.id === selectedId);
+    if (!unit) return;
+    setPlanDocs((prev) => {
+      if (prev[selectedId]?.walls.length) return prev;
+      const doc = ensurePlanDocForUnit(
+        unit,
+        prev[selectedId],
+        interiors[selectedId],
+        params.wall_thickness_external || 0.2,
+      );
+      // interior 없으면 문서에서 한 번 동기
+      queueMicrotask(() => {
+        setInteriors((ip) => {
+          if (ip[selectedId]?.rooms.length) return ip;
+          return { ...ip, [selectedId]: planDocumentToUnitInterior(unit, doc) };
+        });
+      });
+      return { ...prev, [selectedId]: doc };
+    });
+  }, [stage, plan, selectedId, interiors, params.wall_thickness_external]);
 
   const enterStage2 = useCallback(() => {
     if (!plan) {
@@ -1015,51 +1094,109 @@ export default function EditorPage() {
           />
         ) : null}
 
-        <FloorCanvas
-          plan={plan}
-          mode={mode}
-          editMode={stage === 2 ? "view" : editMode}
-          draft={draft}
-          nextRole={nextRole}
-          onDraftChange={setDraft}
-          onCommitDraw={commitDraw}
-          onCancelDraw={cancelDraw}
-          inputBoundary={params.boundary}
-          inputCorridors={params.corridors}
-          inputCores={params.cores}
-          corridorWidth={params.corridor_width}
-          staleParams={
-            stage === 1 && generatedFrom !== null && generatedFrom !== JSON.stringify(params)
-          }
-          defaultCoreLength={params.core_length}
-          defaultCoreReach={params.core_reach}
-          onEditGeometry={editGeometry}
-          onEditCores={editCores}
-          selectedCoreId={stage === 1 ? selectedCoreId : null}
-          onSelectCore={setSelectedCoreId}
-          underlay={underlay}
-          onUnderlay={setUnderlay}
-          overlays={overlays}
-          selectedId={selectedId}
-          onSelect={handleSelectUnit}
-          selectedUnitIds={selectedUnitIds}
-          onWallMove={(edits) => void handleWallMove(edits)}
-          interiors={interiors}
-          highlightedUnitIds={highlightedUnitIds}
-          interiorTool={stage === 2 ? interiorTool : "select"}
-          interiorRoomKind={interiorRoomKind}
-          interiorDoorCategory={interiorDoorCategory}
-          interiorDoorWidth={interiorDoorWidth}
-          interiorFurnCatalogId={interiorFurnId}
-          interiorDraft={interiorDraft}
-          onInteriorDraftChange={setInteriorDraft}
-          onInteriorRoomCommit={(pts) => {
-            patchSelectedInterior((unit, it) => addRoom(unit, it, pts, interiorRoomKind));
-            setInteriorDraft([]);
-          }}
-          onInteriorDoorPlace={placeDoor}
-          onInteriorFurnPlace={placeFurn}
-        />
+        {stage === 2 && selectedUnit && selectedPlanDoc ? (
+          <div className="planCanvasStack">
+            <div className="planToolbar">
+              <strong style={{ fontSize: 12, marginRight: 8 }}>{selectedUnit.id} · Rayon 2D</strong>
+              {(
+                [
+                  ["select", "선택 V"],
+                  ["wall", "벽 W"],
+                  ["zone", "실(존) Z"],
+                  ["door", "문 D"],
+                  ["pan", "팬 H"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={planTool === id ? "on" : ""}
+                  onClick={() => setPlanTool(id)}
+                >
+                  {label}
+                </button>
+              ))}
+              <span className="sep" />
+              {(
+                [
+                  ["door-single", "여닫이"],
+                  ["door-double", "쌍여닫이"],
+                  ["door-sliding", "미닫이"],
+                  ["window-single", "창"],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={planOpeningKind === k ? "on" : ""}
+                  onClick={() => {
+                    setPlanOpeningKind(k);
+                    setPlanTool("door");
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+              <span className="sep" />
+              <em style={{ fontSize: 11, color: "var(--muted)" }}>
+                벽·실·문은 PlanDocument로 저장 · 3D 압출 준비됨
+              </em>
+            </div>
+            <PlanDocCanvas
+              key={selectedUnit.id}
+              doc={selectedPlanDoc}
+              onChange={(doc) => updatePlanDoc(selectedUnit.id, doc)}
+              tool={planTool}
+              openingKind={planOpeningKind}
+            />
+          </div>
+        ) : (
+          <FloorCanvas
+            plan={plan}
+            mode={mode}
+            editMode={stage === 2 ? "view" : editMode}
+            draft={draft}
+            nextRole={nextRole}
+            onDraftChange={setDraft}
+            onCommitDraw={commitDraw}
+            onCancelDraw={cancelDraw}
+            inputBoundary={params.boundary}
+            inputCorridors={params.corridors}
+            inputCores={params.cores}
+            corridorWidth={params.corridor_width}
+            staleParams={
+              stage === 1 && generatedFrom !== null && generatedFrom !== JSON.stringify(params)
+            }
+            defaultCoreLength={params.core_length}
+            defaultCoreReach={params.core_reach}
+            onEditGeometry={editGeometry}
+            onEditCores={editCores}
+            selectedCoreId={stage === 1 ? selectedCoreId : null}
+            onSelectCore={setSelectedCoreId}
+            underlay={underlay}
+            onUnderlay={setUnderlay}
+            overlays={overlays}
+            selectedId={selectedId}
+            onSelect={handleSelectUnit}
+            selectedUnitIds={selectedUnitIds}
+            onWallMove={(edits) => void handleWallMove(edits)}
+            interiors={interiors}
+            highlightedUnitIds={highlightedUnitIds}
+            interiorTool={stage === 2 ? interiorTool : "select"}
+            interiorRoomKind={interiorRoomKind}
+            interiorDoorCategory={interiorDoorCategory}
+            interiorDoorWidth={interiorDoorWidth}
+            interiorFurnCatalogId={interiorFurnId}
+            interiorDraft={interiorDraft}
+            onInteriorDraftChange={setInteriorDraft}
+            onInteriorRoomCommit={(pts) => {
+              patchSelectedInterior((unit, it) => addRoom(unit, it, pts, interiorRoomKind));
+              setInteriorDraft([]);
+            }}
+            onInteriorDoorPlace={placeDoor}
+            onInteriorFurnPlace={placeFurn}
+          />
+        )}
 
         <MetricsPanel
           plan={plan}

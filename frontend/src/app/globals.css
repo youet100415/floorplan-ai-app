@@ -148,6 +148,109 @@ button.stage2Cta {
   /* 2단계에서도 동일 3열, 좌측만 InteriorPanel */
 }
 
+/* Rayon-style plan viewport tokens */
+.planDocHost {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--plan-bg, #f7f7f5);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+.planDocSvg {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  touch-action: none;
+  display: block;
+  cursor: crosshair;
+}
+.planDocHud {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  pointer-events: none;
+}
+.planZoneLabel {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--ink-2);
+  pointer-events: none;
+}
+.planToolbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.planToolbar button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.planToolbar .sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 4px;
+}
+.planCanvasStack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+:root {
+  --plan-bg: #f4f4f1;
+  --plan-grid: rgba(0, 0, 0, 0.06);
+  --plan-axis: rgba(0, 0, 0, 0.12);
+  --plan-wall: #2a2a28;
+  --plan-wall-active: #1a4a8a;
+  --plan-wall-stroke: #1a1a18;
+  --plan-wall-fill: #3a3a36;
+  --plan-zone-fill: rgba(90, 140, 200, 0.14);
+  --plan-zone-stroke: rgba(60, 100, 160, 0.45);
+  --plan-corridor-fill: rgba(180, 180, 170, 0.2);
+  --plan-selection: #2a78d6;
+  --plan-selection-fill: rgba(42, 120, 214, 0.18);
+  --plan-draft: #2a78d6;
+  --plan-site: rgba(0, 0, 0, 0.35);
+  --plan-divider: rgba(0, 0, 0, 0.35);
+}
+:root[data-theme="dark"] {
+  --plan-bg: #141413;
+  --plan-grid: rgba(255, 255, 255, 0.06);
+  --plan-axis: rgba(255, 255, 255, 0.12);
+  --plan-wall: #c8c6bc;
+  --plan-wall-active: #6db0ff;
+  --plan-wall-stroke: #e8e6dc;
+  --plan-wall-fill: #b0aea4;
+  --plan-zone-fill: rgba(100, 160, 230, 0.16);
+  --plan-zone-stroke: rgba(140, 190, 255, 0.4);
+  --plan-selection: #5aa0f0;
+  --plan-selection-fill: rgba(90, 160, 240, 0.2);
+  --plan-draft: #5aa0f0;
+  --plan-site: rgba(255, 255, 255, 0.35);
+}
+
 .tplCards {
   display: flex;
   flex-direction: column;
