@@ -136,6 +136,21 @@ button, input, select { font: inherit; color: inherit; }
     color-mix(in srgb, #9c66d7 10%, var(--surface))
   );
 }
+.stageBanner.stageDraw {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, #0ca30c 12%, var(--surface)),
+    color-mix(in srgb, var(--accent) 10%, var(--surface))
+  );
+}
+.tplCard.static {
+  cursor: default;
+  list-style: none;
+}
+.tplCards li.tplCard {
+  display: flex;
+  flex-direction: column;
+}
 .stageBanner strong { display: block; font-size: 13px; margin-bottom: 2px; }
 .stageBanner p { margin: 0; font-size: 11px; color: var(--ink-2); line-height: 1.4; }
 button.compact { width: auto; padding: 5px 10px; font-size: 12px; white-space: nowrap; }

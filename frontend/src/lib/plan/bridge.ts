@@ -13,6 +13,7 @@ import type {
   RoomKind,
   Unit,
   UnitInterior,
+  UnitTemplate,
 } from "@/utils/types";
 import { buildApartmentZones, computeEgressPath, countEdges } from "@/utils/interior/diagrams";
 import { scoreInterior } from "@/utils/interior/scoreInterior";
@@ -281,6 +282,138 @@ export function ensurePlanDocForUnit(
 ): PlanDocument {
   if (existing && existing.walls.length > 0) return existing;
   return unitToPlanDocument(unit, interior, { wallThickness });
+}
+
+/** 라이브러리 작도용 빈 사각 유닛 외곽 (m) */
+export function blankAuthorDocument(
+  widthM: number,
+  depthM: number,
+  wallThickness = 0.2,
+  name = "새 내부 평면",
+): PlanDocument {
+  const w = Math.max(widthM, 3);
+  const d = Math.max(depthM, 3);
+  const poly: Pt[] = [
+    [0, 0],
+    [w, 0],
+    [w, d],
+    [0, d],
+  ];
+  const storyId = "story-1";
+  return {
+    name,
+    walls: polygonToWalls(poly, wallThickness, storyId, "auth-w"),
+    openings: [],
+    zones: [],
+    dividers: [],
+    lines: [],
+    dimensions: [],
+    stories: [{ id: storyId, name: "1층", elevation: 0, height: DEFAULT_STORY_HEIGHT }],
+    siteBoundary: poly.map(ptToPoint),
+  };
+}
+
+/**
+ * 작도한 PlanDocument → 라이브러리 UnitTemplate 저장 형식.
+ * 외곽 siteBoundary 또는 벽 루프 bbox 를 로컬 원점으로 둔다.
+ */
+export function planDocumentToTemplate(
+  doc: PlanDocument,
+  name: string,
+  unitTypeHint?: string,
+): UnitTemplate {
+  const boundary =
+    doc.siteBoundary && doc.siteBoundary.length >= 3
+      ? doc.siteBoundary
+      : (() => {
+          const pts: Point[] = [];
+          for (const w of doc.walls) {
+            pts.push(w.a, w.b);
+          }
+          return pts;
+        })();
+
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (const p of boundary) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+  if (!Number.isFinite(minX)) {
+    minX = 0;
+    minY = 0;
+    maxX = 8;
+    maxY = 7;
+  }
+  const bw = Math.max(maxX - minX, 0.5);
+  const bd = Math.max(maxY - minY, 0.5);
+  const toLocal = (p: Point): Pt => [p.x - minX, p.y - minY];
+
+  const rooms = doc.zones
+    .filter((z) => z.kind !== "corridor")
+    .map((z) => ({
+      id: z.id,
+      name: z.name || "실",
+      kind: roomKindFromName(z.name || ""),
+      polygon: z.points.map(toLocal),
+    }));
+
+  const doors = doc.openings
+    .filter((o) => !o.kind.startsWith("window"))
+    .map((o) => {
+      const wall = doc.walls.find((w) => w.id === o.wallId);
+      let at: Pt = [0, 0];
+      if (wall) {
+        const L = Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y) || 1;
+        const t = o.offset / L;
+        at = toLocal({
+          x: wall.a.x + (wall.b.x - wall.a.x) * t,
+          y: wall.a.y + (wall.b.y - wall.a.y) * t,
+        });
+      }
+      return {
+        id: o.id,
+        category: openingKindToCategory(o.kind) as DoorCategory,
+        type: openingKindToDoorType(o.kind),
+        width: o.width,
+        at,
+      };
+    });
+
+  const entry = doors[0];
+  return {
+    id: `user-${Date.now().toString(36)}`,
+    name,
+    unitTypeHint: unitTypeHint || undefined,
+    version: 1,
+    bbox: { w: bw, d: bd },
+    entry: {
+      side: "south",
+      offset: entry?.at[0] ?? bw / 2,
+      width: entry?.width ?? 0.9,
+    },
+    rooms:
+      rooms.length > 0
+        ? rooms
+        : [
+            {
+              id: "whole",
+              name: "전체",
+              kind: "other" as RoomKind,
+              polygon: [
+                [0, 0],
+                [bw, 0],
+                [bw, bd],
+                [0, bd],
+              ],
+            },
+          ],
+    doors,
+  };
 }
 
 export { emptyDocument };

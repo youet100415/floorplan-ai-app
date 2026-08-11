@@ -4,13 +4,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FloorCanvas, { type EditMode, type Overlays } from "@/components/FloorCanvas";
-import InteriorPanel from "@/components/InteriorPanel";
+import InteriorApplyPanel from "@/components/InteriorApplyPanel";
+import InteriorDrawPanel from "@/components/InteriorDrawPanel";
 import MetricsPanel from "@/components/MetricsPanel";
 import PlanDocCanvas from "@/components/PlanDocCanvas";
 import Sidebar from "@/components/Sidebar";
 import {
+  blankAuthorDocument,
   ensurePlanDocForUnit,
   planDocumentToExtrudeSolids,
+  planDocumentToTemplate,
   planDocumentToUnitInterior,
   unitToPlanDocument,
   type OpeningKind,
@@ -31,10 +34,10 @@ import {
   addRoom,
   autoFitAll,
   batchUpdateDoors,
+  deleteUserTemplate,
   emptyInterior,
   fitTemplateToUnit,
   getTemplate,
-  interiorToTemplate,
   listTemplates,
   loadUserTemplates,
   pickTemplateForType,
@@ -128,8 +131,8 @@ export default function EditorPage() {
   const [agentLog, setAgentLog] = useState<string[]>([]);
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([]);
   const [agentBusy, setAgentBusy] = useState(false);
-  /** 1=조닝 · 2=내부 평면 (영상처럼 탭으로 전환) */
-  const [stage, setStage] = useState<1 | 2>(1);
+  /** 1=조닝 · 2=내부 그리기(저장) · 3=내부 적용 */
+  const [stage, setStage] = useState<1 | 2 | 3>(1);
   const [userTemplates, setUserTemplates] = useState<UnitTemplate[]>([]);
   const [interiorTool, setInteriorTool] = useState<InteriorTool>("select");
   const [interiorRoomKind, setInteriorRoomKind] = useState<RoomKind>("living");
@@ -137,10 +140,19 @@ export default function EditorPage() {
   const [interiorDoorWidth, setInteriorDoorWidth] = useState(0.9);
   const [interiorFurnId, setInteriorFurnId] = useState("sofa_2000");
   const [interiorDraft, setInteriorDraft] = useState<Pt[]>([]);
-  /** 유닛별 Rayon PlanDocument — 2D 편집 + 3D 압출 소스 */
+  /** 유닛별 Rayon PlanDocument — 적용 후 편집·3D 소스 */
   const [planDocs, setPlanDocs] = useState<Record<string, PlanDocument>>({});
-  const [planTool, setPlanTool] = useState<ToolId>("select");
+  const [planTool, setPlanTool] = useState<ToolId>("zone");
   const [planOpeningKind, setPlanOpeningKind] = useState<OpeningKind>("door-single");
+  /** 내부 그리기 탭 전용 캔버스 */
+  const [authorDoc, setAuthorDoc] = useState<PlanDocument>(() =>
+    blankAuthorDocument(8.4, 7.2, 0.2, "새 내부 평면"),
+  );
+  const [authorW, setAuthorW] = useState(8.4);
+  const [authorD, setAuthorD] = useState(7.2);
+  const [authorSaveName, setAuthorSaveName] = useState("");
+  const [authorTypeHint, setAuthorTypeHint] = useState("2BR");
+  const [authorGen, setAuthorGen] = useState(0);
 
   const agentId = () => `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -441,9 +453,9 @@ export default function EditorPage() {
     [plan],
   );
 
-  /** 유닛 선택 시 PlanDocument 보장 */
+  /** 적용 탭: 유닛 선택 시 PlanDocument 보장 */
   useEffect(() => {
-    if (stage !== 2 || !plan || !selectedId) return;
+    if (stage !== 3 || !plan || !selectedId) return;
     const unit = plan.units.find((u) => u.id === selectedId);
     if (!unit) return;
     setPlanDocs((prev) => {
@@ -454,7 +466,6 @@ export default function EditorPage() {
         interiors[selectedId],
         params.wall_thickness_external || 0.2,
       );
-      // interior 없으면 문서에서 한 번 동기
       queueMicrotask(() => {
         setInteriors((ip) => {
           if (ip[selectedId]?.rooms.length) return ip;
@@ -465,12 +476,22 @@ export default function EditorPage() {
     });
   }, [stage, plan, selectedId, interiors, params.wall_thickness_external]);
 
-  const enterStage2 = useCallback(() => {
+  /** 내부 그리기 탭 — 건물 평면 없어도 가능 */
+  const enterStageDraw = useCallback(() => {
+    setStage(2);
+    setEditMode("view");
+    setDraft([]);
+    setPlanTool("zone");
+    setError(null);
+  }, []);
+
+  /** 내부 적용 탭 — 구획 평면 필요 */
+  const enterStageApply = useCallback(() => {
     if (!plan) {
-      setError("먼저 1단계에서 평면을 생성하세요.");
+      setError("먼저 1단계 조닝에서 평면을 생성하세요.");
       return;
     }
-    setStage(2);
+    setStage(3);
     setEditMode("view");
     setDraft([]);
     setOverlays((o) => ({
@@ -487,16 +508,47 @@ export default function EditorPage() {
         {
           id: agentId(),
           role: "agent",
-          text:
-            "안녕하세요. Archie입니다. 유닛에 템플릿을 적용한 뒤, 욕실·현관 문을 자연어로 일괄 수정할 수 있습니다.",
+          text: "저장된 내부 평면을 유닛에 적용한 뒤, 문으로 일괄 수정할 수 있습니다.",
           details: [
+            "「내부 그리기」에서 만든 저장본을 위 목록에서 고르세요.",
             "예: 모든 욕실·현관 문을 스윙으로. 욕실 34인치, 현관 36인치",
-            "예: 타입별 자동 배치",
           ],
         },
       ]);
     }
   }, [plan, agentMessages.length]);
+
+  const enterStage2 = enterStageApply;
+
+  const saveAuthorToLibrary = useCallback(() => {
+    const name = authorSaveName.trim() || `내부 ${new Date().toLocaleString("ko-KR")}`;
+    const tpl = planDocumentToTemplate(authorDoc, name, authorTypeHint.trim() || undefined);
+    if (authorDoc.zones.length === 0 && authorDoc.openings.length === 0) {
+      setError("실(존) 또는 문을 그린 뒤 저장하세요.");
+      return;
+    }
+    const next = saveUserTemplate(tpl);
+    setUserTemplates(next);
+    setAuthorSaveName("");
+    setError(null);
+    setAgentMessages((prev) => [
+      ...prev,
+      {
+        id: agentId(),
+        role: "agent",
+        text: `라이브러리 저장: 「${tpl.name}」`,
+        details: [
+          `${tpl.rooms.length}실 · 문 ${tpl.doors.length}`,
+          "「내부 적용」 탭에서 유닛에 적용하세요.",
+        ],
+        summaryCard: {
+          title: "Saved to Library",
+          changes: [tpl.name, `${tpl.bbox.w.toFixed(1)}×${tpl.bbox.d.toFixed(1)} m`],
+          unitIds: [],
+        },
+      },
+    ]);
+  }, [authorDoc, authorSaveName, authorTypeHint]);
 
   const runArchie = useCallback(
     (text: string) => {
@@ -574,6 +626,9 @@ export default function EditorPage() {
     setInteriorDraft([]);
   }, []);
 
+  /** planDocument 선택 시 ensure — 적용 탭(3)에서만 */
+  // (아래 useEffect stage === 3 으로 교체)
+
   const patchSelectedInterior = useCallback(
     (fn: (unit: NonNullable<Plan["units"][0]>, it: UnitInterior | null) => UnitInterior) => {
       if (!plan || !selectedId) {
@@ -619,43 +674,9 @@ export default function EditorPage() {
     [interiorFurnId, patchSelectedInterior],
   );
 
-  const saveSelectedToLibrary = useCallback(
-    (name: string) => {
-      if (!plan || !selectedId) return;
-      const unit = plan.units.find((u) => u.id === selectedId);
-      const it = interiors[selectedId];
-      if (!unit || !it || it.rooms.length < 1) {
-        setError("저장할 실이 없습니다. 내부를 그린 뒤 저장하세요.");
-        return;
-      }
-      const tpl = interiorToTemplate(unit, it, name);
-      const next = saveUserTemplate(tpl);
-      setUserTemplates(next);
-      setAgentMessages((prev) => [
-        ...prev,
-        {
-          id: agentId(),
-          role: "agent",
-          text: `라이브러리에 저장했습니다: 「${tpl.name}」 (점수 ${it.score?.total ?? "—"}%)`,
-          details: [
-            `실 ${tpl.rooms.length} · 문 ${tpl.doors.length}`,
-            "같은 타입 유닛에 「선택 적용」으로 재사용할 수 있습니다.",
-          ],
-          summaryCard: {
-            title: "Saved to Library",
-            changes: [`${tpl.name}`, `Score ${it.score?.total ?? "—"}%`],
-            unitIds: [unit.id],
-          },
-        },
-      ]);
-      setError(null);
-    },
-    [plan, selectedId, interiors],
-  );
-
-  // 2단계: 실 드래프트 Enter / Esc
+  // 적용 탭 레거시 실 드래프트 Enter / Esc
   useEffect(() => {
-    if (stage !== 2) return;
+    if (stage !== 3) return;
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable || t.tagName === "SELECT"))
@@ -918,12 +939,19 @@ export default function EditorPage() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  const stageTitle =
+    stage === 1
+      ? "1 · 조닝 · 동선"
+      : stage === 2
+        ? "2 · 내부 평면 그리기 · 저장"
+        : "3 · 내부 평면 적용";
+
   return (
     <div className={`app stage-${stage}`}>
       <header className="topbar">
         <h1>
           Floorplan<span>AI</span>
-          <em>{stage === 1 ? "1단계 · 조닝 · 동선" : "2단계 · 내부 평면 · 라이브러리"}</em>
+          <em>{stageTitle}</em>
         </h1>
 
         <nav className="stageTabs" aria-label="작업 단계">
@@ -938,31 +966,42 @@ export default function EditorPage() {
           <button
             type="button"
             className={`stageTab${stage === 2 ? " on" : ""}`}
-            disabled={!plan}
-            title={plan ? "내부 평면 작업" : "먼저 평면을 생성하세요"}
-            onClick={enterStage2}
+            title="내부 평면을 그리고 라이브러리에 저장"
+            onClick={enterStageDraw}
           >
             <span className="stageNum">2</span>
-            내부 평면
+            내부 그리기
+          </button>
+          <button
+            type="button"
+            className={`stageTab${stage === 3 ? " on" : ""}`}
+            disabled={!plan}
+            title={plan ? "저장본을 유닛에 적용" : "먼저 조닝에서 평면 생성"}
+            onClick={enterStageApply}
+          >
+            <span className="stageNum">3</span>
+            내부 적용
           </button>
         </nav>
 
         <div className="topActions">
-          {plan && (
+          {stage === 1 && plan && (
             <span className="scorePill">
-              {stage === 1 ? (
+              건물 점수 <strong>{plan.score.toFixed(1)}</strong>
+            </span>
+          )}
+          {stage === 2 && (
+            <span className="scorePill">
+              저장본 <strong>{userTemplates.length}</strong>
+            </span>
+          )}
+          {stage === 3 && plan && (
+            <span className="scorePill">
+              적용 {Object.keys(interiors).length}/{plan.units.length}호
+              {selectedInterior?.score && (
                 <>
-                  건물 점수 <strong>{plan.score.toFixed(1)}</strong>
-                </>
-              ) : (
-                <>
-                  내부 {Object.keys(interiors).length}/{plan.units.length}호
-                  {selectedInterior?.score && (
-                    <>
-                      {" "}
-                      · 선택 <strong>{selectedInterior.score.total}%</strong>
-                    </>
-                  )}
+                  {" "}
+                  · 선택 <strong>{selectedInterior.score.total}%</strong>
                 </>
               )}
             </span>
@@ -987,15 +1026,20 @@ export default function EditorPage() {
 
       {stage === 1 && plan && (
         <div className="stageNudge">
-          <span>평면 생성 완료 — 유닛 구획이 끝났습니다.</span>
-          <button type="button" className="primary" onClick={enterStage2}>
-            2단계 내부 평면 시작 →
-          </button>
+          <span>조닝 완료 — 내부를 그리거나, 저장본을 유닛에 적용하세요.</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" onClick={enterStageDraw}>
+              내부 그리기
+            </button>
+            <button type="button" className="primary" onClick={enterStageApply}>
+              내부 적용 →
+            </button>
+          </div>
         </div>
       )}
 
-      <main className={`layout${stage === 2 ? " layoutStage2" : ""}`}>
-        {stage === 1 ? (
+      <main className={`layout${stage !== 1 ? " layoutStage2" : ""}`}>
+        {stage === 1 && (
           <Sidebar
             params={params}
             onChange={patch}
@@ -1008,6 +1052,7 @@ export default function EditorPage() {
               setOptions([]);
               setStage(1);
               setInteriors({});
+              setPlanDocs({});
             }}
             editMode={editMode}
             draft={draft}
@@ -1033,13 +1078,51 @@ export default function EditorPage() {
             onGenerate={() => run(false)}
             onExplore={() => run(true)}
             hasPlan={!!plan}
-            onGoStage2={enterStage2}
+            onGoStage2={enterStageApply}
           />
-        ) : plan ? (
-          <InteriorPanel
+        )}
+
+        {stage === 2 && (
+          <InteriorDrawPanel
+            canvasW={authorW}
+            canvasD={authorD}
+            tool={planTool}
+            openingKind={planOpeningKind}
+            saveName={authorSaveName}
+            unitTypeHint={authorTypeHint}
+            userTemplates={userTemplates}
+            zoneCount={authorDoc.zones.length}
+            wallCount={authorDoc.walls.length}
+            openingCount={authorDoc.openings.length}
+            onCanvasW={setAuthorW}
+            onCanvasD={setAuthorD}
+            onTool={setPlanTool}
+            onOpeningKind={setPlanOpeningKind}
+            onSaveName={setAuthorSaveName}
+            onUnitTypeHint={setAuthorTypeHint}
+            onNewBlank={() => {
+              setAuthorDoc(
+                blankAuthorDocument(
+                  authorW,
+                  authorD,
+                  params.wall_thickness_external || 0.2,
+                  authorSaveName || "새 내부 평면",
+                ),
+              );
+              setAuthorGen((g) => g + 1);
+            }}
+            onSave={saveAuthorToLibrary}
+            onDeleteTemplate={(id) => setUserTemplates(deleteUserTemplate(id))}
+            onGoApply={enterStageApply}
+            canGoApply={!!plan}
+          />
+        )}
+
+        {stage === 3 && plan && (
+          <InteriorApplyPanel
             plan={plan}
             mode={mode}
-            templates={listTemplates()}
+            builtinTemplates={listTemplates()}
             userTemplates={userTemplates}
             interiors={interiors}
             selectedId={selectedId}
@@ -1047,64 +1130,28 @@ export default function EditorPage() {
             agentMessages={agentMessages}
             agentBusy={agentBusy}
             busy={busy}
-            interiorTool={interiorTool}
-            interiorRoomKind={interiorRoomKind}
-            interiorDoorCategory={interiorDoorCategory}
-            interiorDoorWidth={interiorDoorWidth}
-            interiorFurnId={interiorFurnId}
-            interiorDraftLen={interiorDraft.length}
-            onInteriorTool={(t) => {
-              setInteriorTool(t);
-              setInteriorDraft([]);
-            }}
-            onInteriorRoomKind={setInteriorRoomKind}
-            onInteriorDoorCategory={setInteriorDoorCategory}
-            onInteriorDoorWidth={setInteriorDoorWidth}
-            onInteriorFurnId={setInteriorFurnId}
             onSelectUnit={(id) => handleSelectUnit(id, false)}
             onApplyTemplate={applyLibraryTemplate}
             onAutoFitInteriors={applyAutoInteriors}
             onClearInteriors={clearInteriors}
             onBatchDoors={batchDoorUpdate}
             onAgentSend={runArchie}
-            onStartEmptyInterior={startEmptyInterior}
-            onCommitRoomDraft={commitRoomDraft}
-            onCancelRoomDraft={() => setInteriorDraft([])}
-            onDeleteLastRoom={() =>
-              patchSelectedInterior((unit, it) => {
-                if (!it || it.rooms.length === 0) return it ?? emptyInterior(unit);
-                return removeRoom(unit, it, it.rooms[it.rooms.length - 1].id);
-              })
-            }
-            onDeleteLastDoor={() =>
-              patchSelectedInterior((unit, it) => {
-                if (!it || it.doors.length === 0) return it ?? emptyInterior(unit);
-                return removeDoor(unit, it, it.doors[it.doors.length - 1].id);
-              })
-            }
-            onDeleteLastFurn={() =>
-              patchSelectedInterior((unit, it) => {
-                if (!it || !(it.furniture && it.furniture.length)) return it ?? emptyInterior(unit);
-                const last = it.furniture[it.furniture.length - 1];
-                return removeFurniture(unit, it, last.id);
-              })
-            }
-            onSaveToLibrary={saveSelectedToLibrary}
-            onBackToZoning={enterStage1}
+            onGoDraw={enterStageDraw}
+            onBackZoning={enterStage1}
           />
-        ) : null}
+        )}
 
-        {stage === 2 && selectedUnit && selectedPlanDoc ? (
+        {stage === 2 ? (
           <div className="planCanvasStack">
             <div className="planToolbar">
-              <strong style={{ fontSize: 12, marginRight: 8 }}>{selectedUnit.id} · Rayon 2D</strong>
+              <strong style={{ fontSize: 12, marginRight: 8 }}>내부 평면 작도 · Rayon 2D</strong>
               {(
                 [
-                  ["select", "선택 V"],
-                  ["wall", "벽 W"],
-                  ["zone", "실(존) Z"],
-                  ["door", "문 D"],
-                  ["pan", "팬 H"],
+                  ["select", "선택"],
+                  ["wall", "벽"],
+                  ["zone", "실(존)"],
+                  ["door", "문"],
+                  ["pan", "팬"],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -1117,30 +1164,42 @@ export default function EditorPage() {
                 </button>
               ))}
               <span className="sep" />
+              <em style={{ fontSize: 11, color: "var(--muted)" }}>
+                저장 후 「내부 적용」에서 유닛에 끼우기
+              </em>
+            </div>
+            <PlanDocCanvas
+              key={`author-${authorGen}`}
+              doc={authorDoc}
+              onChange={setAuthorDoc}
+              tool={planTool}
+              openingKind={planOpeningKind}
+            />
+          </div>
+        ) : stage === 3 && selectedUnit && selectedPlanDoc ? (
+          <div className="planCanvasStack">
+            <div className="planToolbar">
+              <strong style={{ fontSize: 12, marginRight: 8 }}>
+                {selectedUnit.id} · 적용 결과 (편집 가능)
+              </strong>
               {(
                 [
-                  ["door-single", "여닫이"],
-                  ["door-double", "쌍여닫이"],
-                  ["door-sliding", "미닫이"],
-                  ["window-single", "창"],
+                  ["select", "선택"],
+                  ["wall", "벽"],
+                  ["zone", "실"],
+                  ["door", "문"],
+                  ["pan", "팬"],
                 ] as const
-              ).map(([k, label]) => (
+              ).map(([id, label]) => (
                 <button
-                  key={k}
+                  key={id}
                   type="button"
-                  className={planOpeningKind === k ? "on" : ""}
-                  onClick={() => {
-                    setPlanOpeningKind(k);
-                    setPlanTool("door");
-                  }}
+                  className={planTool === id ? "on" : ""}
+                  onClick={() => setPlanTool(id)}
                 >
                   {label}
                 </button>
               ))}
-              <span className="sep" />
-              <em style={{ fontSize: 11, color: "var(--muted)" }}>
-                벽·실·문은 PlanDocument로 저장 · 3D 압출 준비됨
-              </em>
             </div>
             <PlanDocCanvas
               key={selectedUnit.id}
@@ -1154,7 +1213,7 @@ export default function EditorPage() {
           <FloorCanvas
             plan={plan}
             mode={mode}
-            editMode={stage === 2 ? "view" : editMode}
+            editMode={stage === 1 ? editMode : "view"}
             draft={draft}
             nextRole={nextRole}
             onDraftChange={setDraft}
@@ -1182,7 +1241,7 @@ export default function EditorPage() {
             onWallMove={(edits) => void handleWallMove(edits)}
             interiors={interiors}
             highlightedUnitIds={highlightedUnitIds}
-            interiorTool={stage === 2 ? interiorTool : "select"}
+            interiorTool="select"
             interiorRoomKind={interiorRoomKind}
             interiorDoorCategory={interiorDoorCategory}
             interiorDoorWidth={interiorDoorWidth}
@@ -1207,6 +1266,7 @@ export default function EditorPage() {
             setActiveIndex(i);
             setPlan(options[i]);
             setInteriors({});
+            setPlanDocs({});
             setStage(1);
           }}
           unitCountTarget={params.unit_count_target}

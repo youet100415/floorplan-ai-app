@@ -114,7 +114,7 @@ export default function MetricsPanel({
   selectedId?: string | null;
   population?: PopulationPoint[];
   /** 1=조닝 결과 중심 · 2=내부 분석 중심 */
-  stage?: 1 | 2;
+  stage?: 1 | 2 | 3;
 }) {
   const [tab, setTab] = useState<MetricsTab>("summary");
   const hasOptions = options.length > 1;
@@ -124,9 +124,9 @@ export default function MetricsPanel({
       ? null
       : interiorList.reduce((s, i) => s + (i.score?.total ?? 0), 0) / interiorList.length;
 
-  // 2단계 진입 시 분석 탭, 대안 탐색 시 대안 탭
+  // 적용(3) 진입 시 분석 탭, 대안 탐색 시 대안 탭
   useEffect(() => {
-    if (stage === 2) setTab("analysis");
+    if (stage === 2 || stage === 3) setTab("analysis");
   }, [stage]);
   useEffect(() => {
     if (hasOptions && stage === 1) setTab("options");
