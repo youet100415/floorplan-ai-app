@@ -1,24 +1,21 @@
 "use client";
 
-/** 좌측 파라미터 패널 — 조닝 / Unit Mix / 표시 탭. */
+/** 1단계 좌측 파라미터 패널 — 조닝 / Unit Mix / 표시 탭. */
 
 import { useEffect, useState } from "react";
 import { seriesColor, type Mode } from "@/utils/palette";
 import type {
   CoreSpec,
-  DoorType,
   GenerateParams,
   PathVertex,
   Pt,
   Underlay,
-  UnitInterior,
-  UnitTemplate,
   UnitTypeSpec,
   VertexRole,
 } from "@/utils/types";
 import type { EditMode, Overlays } from "./FloorCanvas";
 
-type SideTab = "zoning" | "mix" | "interior" | "view";
+type SideTab = "zoning" | "mix" | "view";
 
 interface Props {
   params: GenerateParams;
@@ -49,20 +46,9 @@ interface Props {
   busy: boolean;
   onGenerate: () => void;
   onExplore: () => void;
+  /** 평면 생성 후 2단계로 넘어갈 때 */
   hasPlan: boolean;
-  templates: UnitTemplate[];
-  interiorsCount: number;
-  selectedUnitCount: number;
-  selectedInterior: UnitInterior | null;
-  agentLog: string[];
-  onApplyTemplate: (templateId: string, scope: "selected" | "type" | "all") => void;
-  onAutoFitInteriors: () => void;
-  onClearInteriors: () => void;
-  onBatchDoors: (
-    category: "all" | "entrance" | "bathroom" | "bedroom",
-    width: number,
-    type?: DoorType,
-  ) => void;
+  onGoStage2?: () => void;
 }
 
 function Slider({
@@ -109,7 +95,6 @@ function Slider({
 const TABS: { id: SideTab; label: string; hint: string }[] = [
   { id: "zoning", label: "조닝", hint: "외곽 · 복도 · 코어" },
   { id: "mix", label: "Unit Mix", hint: "타입 · 면적 · 비율" },
-  { id: "interior", label: "내부", hint: "라이브러리 · 점수 · 문" },
   { id: "view", label: "표시", hint: "작도 · 밑깔기 · 레이어" },
 ];
 
@@ -125,11 +110,9 @@ export default function Sidebar({
   selectedCoreId, onSelectCore, onPatchCore, onRemoveCore,
   onRemoveCorridor, underlay, onUnderlay, onLoadUnderlay,
   overlays, onOverlays, variants, onVariants, busy, onGenerate, onExplore,
-  hasPlan, templates, interiorsCount, selectedUnitCount, selectedInterior,
-  agentLog, onApplyTemplate, onAutoFitInteriors, onClearInteriors, onBatchDoors,
+  hasPlan, onGoStage2,
 }: Props) {
   const [tab, setTab] = useState<SideTab>("zoning");
-  const [libTpl, setLibTpl] = useState(templates[0]?.id ?? "1BR_A");
   const ratioSum = params.unit_mix.reduce((s, u) => s + u.ratio, 0);
   const selectedCore = (params.cores ?? []).find((c) => c.id === selectedCoreId) ?? null;
 
@@ -572,141 +555,6 @@ export default function Sidebar({
           </section>
         )}
 
-        {tab === "interior" && (
-          <>
-            <section>
-              <h2>유닛 라이브러리</h2>
-              <p className="note">
-                생성 후 템플릿을 끼워 내부 실·문을 배치합니다. 같은 템플릿 =
-                링크 그룹.
-              </p>
-              {!hasPlan && (
-                <p className="note warn">먼저 하단에서 평면을 생성하세요.</p>
-              )}
-              <label className="ctl">
-                <span className="ctlHead">
-                  템플릿
-                  <output>{templates.find((t) => t.id === libTpl)?.name ?? libTpl}</output>
-                </span>
-                <select
-                  className="fullSelect"
-                  value={libTpl}
-                  onChange={(e) => setLibTpl(e.target.value)}
-                  disabled={!hasPlan}
-                >
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                      {t.unitTypeHint ? ` (${t.unitTypeHint})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="drawRow" style={{ marginTop: 10 }}>
-                <button
-                  className="primary"
-                  disabled={!hasPlan || busy}
-                  onClick={() => onApplyTemplate(libTpl, "selected")}
-                  title="선택한 세대에 적용"
-                >
-                  선택 적용
-                </button>
-                <button
-                  disabled={!hasPlan || busy}
-                  onClick={() => onApplyTemplate(libTpl, "type")}
-                >
-                  타입 전체
-                </button>
-              </div>
-              <div className="drawRow" style={{ marginTop: 6 }}>
-                <button disabled={!hasPlan || busy} onClick={() => onApplyTemplate(libTpl, "all")}>
-                  전 유닛
-                </button>
-                <button className="ghost" disabled={!hasPlan || busy} onClick={onAutoFitInteriors}>
-                  타입별 자동
-                </button>
-              </div>
-              <p className="note">
-                선택 {selectedUnitCount}호 · 내부 적용 {interiorsCount}호
-              </p>
-              {interiorsCount > 0 && (
-                <button className="ghost danger" style={{ marginTop: 8 }} onClick={onClearInteriors}>
-                  내부 평면 모두 제거
-                </button>
-              )}
-            </section>
-
-            <section>
-              <h2>링크 · 문 일괄</h2>
-              <p className="note">같은 템플릿 그룹의 문을 한꺼번에 바꿉니다.</p>
-              <div className="drawRow">
-                <button
-                  disabled={interiorsCount === 0 || busy}
-                  onClick={() => onBatchDoors("bathroom", 0.762, "swing_left")}
-                >
-                  욕실 30″
-                </button>
-                <button
-                  disabled={interiorsCount === 0 || busy}
-                  onClick={() => onBatchDoors("entrance", 0.914, "swing_left")}
-                >
-                  현관 36″
-                </button>
-              </div>
-              <div className="drawRow" style={{ marginTop: 6 }}>
-                <button
-                  disabled={interiorsCount === 0 || busy}
-                  onClick={() => onBatchDoors("all", 0.864, "swing_left")}
-                >
-                  전 문 34″ 스윙
-                </button>
-              </div>
-            </section>
-
-            {selectedInterior?.score && (
-              <section>
-                <h2>선택 유닛 점수</h2>
-                <div className="scoreGrid">
-                  <div>
-                    <span>종합</span>
-                    <strong>{selectedInterior.score.total}%</strong>
-                  </div>
-                  <div>
-                    <span>Compliance</span>
-                    <strong>{selectedInterior.score.compliance}</strong>
-                  </div>
-                  <div>
-                    <span>Adaptivity</span>
-                    <strong>{selectedInterior.score.adaptivity}</strong>
-                  </div>
-                  <div>
-                    <span>Daylight</span>
-                    <strong>{selectedInterior.score.daylight}</strong>
-                  </div>
-                </div>
-                <ul className="miniChecks">
-                  {selectedInterior.score.checks.slice(0, 6).map((c, i) => (
-                    <li key={i} className={c.level}>
-                      {c.message}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {agentLog.length > 0 && (
-              <section>
-                <h2>적용 로그</h2>
-                <ul className="agentLog">
-                  {agentLog.map((line, i) => (
-                    <li key={i}>{line}</li>
-                  ))}
-                </ul>
-              </section>
-            )}
-          </>
-        )}
-
         {tab === "view" && (
           <>
             <section>
@@ -843,6 +691,11 @@ export default function Sidebar({
             aria-label="대안 개수"
           />
         </div>
+        {hasPlan && onGoStage2 && (
+          <button className="primary big stage2Cta" disabled={busy} onClick={onGoStage2}>
+            2단계 내부 평면 →
+          </button>
+        )}
       </div>
     </aside>
   );

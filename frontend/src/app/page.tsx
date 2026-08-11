@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FloorCanvas, { type EditMode, type Overlays } from "@/components/FloorCanvas";
+import InteriorPanel from "@/components/InteriorPanel";
 import MetricsPanel from "@/components/MetricsPanel";
 import Sidebar from "@/components/Sidebar";
 import {
@@ -99,6 +100,8 @@ export default function EditorPage() {
   const [interiors, setInteriors] = useState<Record<string, UnitInterior>>({});
   const [highlightedUnitIds, setHighlightedUnitIds] = useState<string[]>([]);
   const [agentLog, setAgentLog] = useState<string[]>([]);
+  /** 1=조닝 · 2=내부 평면 (영상처럼 탭으로 전환) */
+  const [stage, setStage] = useState<1 | 2>(1);
 
   // ------------------------------------------------------------ 프로젝트 저장
   const [projectName, setProjectName] = useState("제목 없음");
@@ -172,6 +175,8 @@ export default function EditorPage() {
         setInteriors({});
         setHighlightedUnitIds([]);
         setAgentLog([]);
+        // 생성 직후에는 1단계에 머물고, 상단/하단 CTA 로 2단계 진입
+        setStage(1);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -347,6 +352,37 @@ export default function EditorPage() {
   );
 
   const selectedInterior = selectedId ? interiors[selectedId] : null;
+
+  const enterStage2 = useCallback(() => {
+    if (!plan) {
+      setError("먼저 1단계에서 평면을 생성하세요.");
+      return;
+    }
+    setStage(2);
+    setEditMode("view");
+    setDraft([]);
+    setOverlays((o) => ({
+      ...o,
+      interiors: true,
+      zones: true,
+      travel: false,
+      graph: false,
+      egress: true,
+    }));
+    setError(null);
+    // 내부가 하나도 없으면 타입별 자동 적용 안내 로그만
+    if (Object.keys(interiors).length === 0) {
+      setAgentLog((logs) => [
+        "2단계 진입 — 라이브러리에서 템플릿을 골라 유닛에 적용하세요. 또는 「타입별 자동 배치」.",
+        ...logs,
+      ].slice(0, 12));
+    }
+  }, [plan, interiors]);
+
+  const enterStage1 = useCallback(() => {
+    setStage(1);
+    setEditMode("view");
+  }, []);
 
   /** 결과 패널의 세대수 ± — 목표를 바꾸고 곧바로 그 값으로 다시 생성한다. */
   const setUnitCountTarget = useCallback(
@@ -590,16 +626,52 @@ export default function EditorPage() {
   });
 
   return (
-    <div className="app">
+    <div className={`app stage-${stage}`}>
       <header className="topbar">
         <h1>
           Floorplan<span>AI</span>
-          <em>평면 · 동선 자동 생성기</em>
+          <em>{stage === 1 ? "1단계 · 조닝 · 동선" : "2단계 · 내부 평면 · 라이브러리"}</em>
         </h1>
+
+        <nav className="stageTabs" aria-label="작업 단계">
+          <button
+            type="button"
+            className={`stageTab${stage === 1 ? " on" : ""}`}
+            onClick={enterStage1}
+          >
+            <span className="stageNum">1</span>
+            조닝
+          </button>
+          <button
+            type="button"
+            className={`stageTab${stage === 2 ? " on" : ""}`}
+            disabled={!plan}
+            title={plan ? "내부 평면 작업" : "먼저 평면을 생성하세요"}
+            onClick={enterStage2}
+          >
+            <span className="stageNum">2</span>
+            내부 평면
+          </button>
+        </nav>
+
         <div className="topActions">
           {plan && (
             <span className="scorePill">
-              점수 <strong>{plan.score.toFixed(1)}</strong>
+              {stage === 1 ? (
+                <>
+                  건물 점수 <strong>{plan.score.toFixed(1)}</strong>
+                </>
+              ) : (
+                <>
+                  내부 {Object.keys(interiors).length}/{plan.units.length}호
+                  {selectedInterior?.score && (
+                    <>
+                      {" "}
+                      · 선택 <strong>{selectedInterior.score.total}%</strong>
+                    </>
+                  )}
+                </>
+              )}
             </span>
           )}
           <button
@@ -620,57 +692,79 @@ export default function EditorPage() {
         </div>
       )}
 
-      <main className="layout">
-        <Sidebar
-          params={params}
-          onChange={patch}
-          mode={mode}
-          boundaries={presets?.boundaries ?? []}
-          onPickBoundary={(coords) => {
-            patch({ boundary: asCorners(coords), corridors: null });
-            setPlan(null);
-            setGeneratedFrom(null);
-            setOptions([]);
-          }}
-          editMode={editMode}
-          draft={draft}
-          nextRole={nextRole}
-          onNextRole={setNextRole}
-          onStartDraw={startDraw}
-          onStartCores={startCores}
-          selectedCoreId={selectedCoreId}
-          onSelectCore={setSelectedCoreId}
-          onPatchCore={patchCore}
-          onRemoveCore={removeCore}
-          onCommitDraw={commitDraw}
-          onCancelDraw={cancelDraw}
-          onRemoveCorridor={removeCorridor}
-          underlay={underlay}
-          onUnderlay={setUnderlay}
-          onLoadUnderlay={loadUnderlay}
-          overlays={overlays}
-          onOverlays={(p) => setOverlays((o) => ({ ...o, ...p }))}
-          variants={variants}
-          onVariants={setVariants}
-          busy={busy}
-          onGenerate={() => run(false)}
-          onExplore={() => run(true)}
-          hasPlan={!!plan}
-          templates={listTemplates()}
-          interiorsCount={Object.keys(interiors).length}
-          selectedUnitCount={selectedUnitIds.length}
-          selectedInterior={selectedInterior}
-          agentLog={agentLog}
-          onApplyTemplate={applyLibraryTemplate}
-          onAutoFitInteriors={applyAutoInteriors}
-          onClearInteriors={clearInteriors}
-          onBatchDoors={batchDoorUpdate}
-        />
+      {stage === 1 && plan && (
+        <div className="stageNudge">
+          <span>평면 생성 완료 — 유닛 구획이 끝났습니다.</span>
+          <button type="button" className="primary" onClick={enterStage2}>
+            2단계 내부 평면 시작 →
+          </button>
+        </div>
+      )}
+
+      <main className={`layout${stage === 2 ? " layoutStage2" : ""}`}>
+        {stage === 1 ? (
+          <Sidebar
+            params={params}
+            onChange={patch}
+            mode={mode}
+            boundaries={presets?.boundaries ?? []}
+            onPickBoundary={(coords) => {
+              patch({ boundary: asCorners(coords), corridors: null });
+              setPlan(null);
+              setGeneratedFrom(null);
+              setOptions([]);
+              setStage(1);
+              setInteriors({});
+            }}
+            editMode={editMode}
+            draft={draft}
+            nextRole={nextRole}
+            onNextRole={setNextRole}
+            onStartDraw={startDraw}
+            onStartCores={startCores}
+            selectedCoreId={selectedCoreId}
+            onSelectCore={setSelectedCoreId}
+            onPatchCore={patchCore}
+            onRemoveCore={removeCore}
+            onCommitDraw={commitDraw}
+            onCancelDraw={cancelDraw}
+            onRemoveCorridor={removeCorridor}
+            underlay={underlay}
+            onUnderlay={setUnderlay}
+            onLoadUnderlay={loadUnderlay}
+            overlays={overlays}
+            onOverlays={(p) => setOverlays((o) => ({ ...o, ...p }))}
+            variants={variants}
+            onVariants={setVariants}
+            busy={busy}
+            onGenerate={() => run(false)}
+            onExplore={() => run(true)}
+            hasPlan={!!plan}
+            onGoStage2={enterStage2}
+          />
+        ) : plan ? (
+          <InteriorPanel
+            plan={plan}
+            mode={mode}
+            templates={listTemplates()}
+            interiors={interiors}
+            selectedId={selectedId}
+            selectedUnitIds={selectedUnitIds}
+            agentLog={agentLog}
+            busy={busy}
+            onSelectUnit={(id) => handleSelectUnit(id, false)}
+            onApplyTemplate={applyLibraryTemplate}
+            onAutoFitInteriors={applyAutoInteriors}
+            onClearInteriors={clearInteriors}
+            onBatchDoors={batchDoorUpdate}
+            onBackToZoning={enterStage1}
+          />
+        ) : null}
 
         <FloorCanvas
           plan={plan}
           mode={mode}
-          editMode={editMode}
+          editMode={stage === 2 ? "view" : editMode}
           draft={draft}
           nextRole={nextRole}
           onDraftChange={setDraft}
@@ -680,12 +774,14 @@ export default function EditorPage() {
           inputCorridors={params.corridors}
           inputCores={params.cores}
           corridorWidth={params.corridor_width}
-          staleParams={generatedFrom !== null && generatedFrom !== JSON.stringify(params)}
+          staleParams={
+            stage === 1 && generatedFrom !== null && generatedFrom !== JSON.stringify(params)
+          }
           defaultCoreLength={params.core_length}
           defaultCoreReach={params.core_reach}
           onEditGeometry={editGeometry}
           onEditCores={editCores}
-          selectedCoreId={selectedCoreId}
+          selectedCoreId={stage === 1 ? selectedCoreId : null}
           onSelectCore={setSelectedCoreId}
           underlay={underlay}
           onUnderlay={setUnderlay}
@@ -707,6 +803,7 @@ export default function EditorPage() {
             setActiveIndex(i);
             setPlan(options[i]);
             setInteriors({});
+            setStage(1);
           }}
           unitCountTarget={params.unit_count_target}
           onUnitCountTarget={setUnitCountTarget}
@@ -714,6 +811,7 @@ export default function EditorPage() {
           interiors={interiors}
           selectedId={selectedId}
           population={population}
+          stage={stage}
         />
       </main>
     </div>

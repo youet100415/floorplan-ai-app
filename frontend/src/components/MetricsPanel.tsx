@@ -100,6 +100,7 @@ export default function MetricsPanel({
   interiors = {},
   selectedId = null,
   population = [],
+  stage = 1,
 }: {
   plan: Plan | null;
   mode: Mode;
@@ -112,6 +113,8 @@ export default function MetricsPanel({
   interiors?: Record<string, UnitInterior>;
   selectedId?: string | null;
   population?: PopulationPoint[];
+  /** 1=조닝 결과 중심 · 2=내부 분석 중심 */
+  stage?: 1 | 2;
 }) {
   const [tab, setTab] = useState<MetricsTab>("summary");
   const hasOptions = options.length > 1;
@@ -121,10 +124,13 @@ export default function MetricsPanel({
       ? null
       : interiorList.reduce((s, i) => s + (i.score?.total ?? 0), 0) / interiorList.length;
 
-  // 대안 탐색 결과가 생기면 대안 탭으로 안내
+  // 2단계 진입 시 분석 탭, 대안 탐색 시 대안 탭
   useEffect(() => {
-    if (hasOptions) setTab("options");
-  }, [hasOptions, options.length]);
+    if (stage === 2) setTab("analysis");
+  }, [stage]);
+  useEffect(() => {
+    if (hasOptions && stage === 1) setTab("options");
+  }, [hasOptions, options.length, stage]);
 
   if (!plan) {
     return (
