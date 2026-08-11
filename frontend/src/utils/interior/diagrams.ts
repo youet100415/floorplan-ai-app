@@ -35,6 +35,7 @@ export function computeEgressPath(unitPoly: Pt[], doorPoint: Pt | null): EgressP
 
 const ROOM_COLORS: Record<string, string> = {
   living: "rgba(66, 133, 244, 0.22)",
+  dining: "rgba(255, 152, 0, 0.22)",
   bedroom: "rgba(156, 102, 215, 0.22)",
   kitchen: "rgba(244, 180, 0, 0.22)",
   bathroom: "rgba(15, 157, 88, 0.20)",

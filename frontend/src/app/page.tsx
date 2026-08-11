@@ -16,14 +16,24 @@ import {
   type Presets,
 } from "@/utils/api";
 import {
+  addDoor,
+  addFurniture,
+  addRoom,
   autoFitAll,
   batchUpdateDoors,
+  emptyInterior,
   fitTemplateToUnit,
   getTemplate,
+  interiorToTemplate,
   listTemplates,
+  loadUserTemplates,
   pickTemplateForType,
   populationFromUnits,
+  removeDoor,
+  removeFurniture,
+  removeRoom,
   runAgentLocal,
+  saveUserTemplate,
   type AgentMessage,
 } from "@/utils/interior";
 import { asCorners } from "@/utils/path";
@@ -33,13 +43,17 @@ import type { Mode } from "@/utils/palette";
 import type {
   CoreSpec,
   CorridorPath,
+  DoorCategory,
   DoorType,
   GenerateParams,
+  InteriorTool,
   PathVertex,
   Plan,
   Pt,
+  RoomKind,
   Underlay,
   UnitInterior,
+  UnitTemplate,
   VertexRole,
 } from "@/utils/types";
 
@@ -106,8 +120,19 @@ export default function EditorPage() {
   const [agentBusy, setAgentBusy] = useState(false);
   /** 1=조닝 · 2=내부 평면 (영상처럼 탭으로 전환) */
   const [stage, setStage] = useState<1 | 2>(1);
+  const [userTemplates, setUserTemplates] = useState<UnitTemplate[]>([]);
+  const [interiorTool, setInteriorTool] = useState<InteriorTool>("select");
+  const [interiorRoomKind, setInteriorRoomKind] = useState<RoomKind>("living");
+  const [interiorDoorCategory, setInteriorDoorCategory] = useState<DoorCategory>("entrance");
+  const [interiorDoorWidth, setInteriorDoorWidth] = useState(0.9);
+  const [interiorFurnId, setInteriorFurnId] = useState("sofa_2000");
+  const [interiorDraft, setInteriorDraft] = useState<Pt[]>([]);
 
   const agentId = () => `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+  useEffect(() => {
+    setUserTemplates(loadUserTemplates());
+  }, []);
 
   // ------------------------------------------------------------ 프로젝트 저장
   const [projectName, setProjectName] = useState("제목 없음");
@@ -260,7 +285,8 @@ export default function EditorPage() {
         setError("먼저 평면을 생성하세요.");
         return;
       }
-      const tpl = getTemplate(templateId);
+      const tpl =
+        getTemplate(templateId) ?? userTemplates.find((t) => t.id === templateId);
       if (!tpl) return;
       const targets =
         scope === "all"
@@ -290,7 +316,7 @@ export default function EditorPage() {
       setError(null);
       window.setTimeout(() => setHighlightedUnitIds([]), 2200);
     },
-    [plan, selectedId, selectedUnitIds],
+    [plan, selectedId, selectedUnitIds, userTemplates],
   );
 
   const applyAutoInteriors = useCallback(() => {
@@ -465,7 +491,112 @@ export default function EditorPage() {
   const enterStage1 = useCallback(() => {
     setStage(1);
     setEditMode("view");
+    setInteriorTool("select");
+    setInteriorDraft([]);
   }, []);
+
+  const patchSelectedInterior = useCallback(
+    (fn: (unit: NonNullable<Plan["units"][0]>, it: UnitInterior | null) => UnitInterior) => {
+      if (!plan || !selectedId) {
+        setError("유닛을 먼저 선택하세요.");
+        return;
+      }
+      const unit = plan.units.find((u) => u.id === selectedId);
+      if (!unit) return;
+      setInteriors((prev) => {
+        const next = fn(unit, prev[selectedId] ?? null);
+        return { ...prev, [selectedId]: next };
+      });
+      setOverlays((o) => ({ ...o, interiors: true, zones: true }));
+      setError(null);
+    },
+    [plan, selectedId],
+  );
+
+  const startEmptyInterior = useCallback(() => {
+    patchSelectedInterior((unit) => emptyInterior(unit));
+    setInteriorTool("room");
+  }, [patchSelectedInterior]);
+
+  const commitRoomDraft = useCallback(() => {
+    if (interiorDraft.length < 3) return;
+    patchSelectedInterior((unit, it) => addRoom(unit, it, interiorDraft, interiorRoomKind));
+    setInteriorDraft([]);
+  }, [interiorDraft, interiorRoomKind, patchSelectedInterior]);
+
+  const placeDoor = useCallback(
+    (at: Pt) => {
+      patchSelectedInterior((unit, it) =>
+        addDoor(unit, it, at, interiorDoorCategory, interiorDoorWidth, "swing_left"),
+      );
+    },
+    [interiorDoorCategory, interiorDoorWidth, patchSelectedInterior],
+  );
+
+  const placeFurn = useCallback(
+    (at: Pt) => {
+      patchSelectedInterior((unit, it) => addFurniture(unit, it, interiorFurnId, at));
+    },
+    [interiorFurnId, patchSelectedInterior],
+  );
+
+  const saveSelectedToLibrary = useCallback(
+    (name: string) => {
+      if (!plan || !selectedId) return;
+      const unit = plan.units.find((u) => u.id === selectedId);
+      const it = interiors[selectedId];
+      if (!unit || !it || it.rooms.length < 1) {
+        setError("저장할 실이 없습니다. 내부를 그린 뒤 저장하세요.");
+        return;
+      }
+      const tpl = interiorToTemplate(unit, it, name);
+      const next = saveUserTemplate(tpl);
+      setUserTemplates(next);
+      setAgentMessages((prev) => [
+        ...prev,
+        {
+          id: agentId(),
+          role: "agent",
+          text: `라이브러리에 저장했습니다: 「${tpl.name}」 (점수 ${it.score?.total ?? "—"}%)`,
+          details: [
+            `실 ${tpl.rooms.length} · 문 ${tpl.doors.length}`,
+            "같은 타입 유닛에 「선택 적용」으로 재사용할 수 있습니다.",
+          ],
+          summaryCard: {
+            title: "Saved to Library",
+            changes: [`${tpl.name}`, `Score ${it.score?.total ?? "—"}%`],
+            unitIds: [unit.id],
+          },
+        },
+      ]);
+      setError(null);
+    },
+    [plan, selectedId, interiors],
+  );
+
+  // 2단계: 실 드래프트 Enter / Esc
+  useEffect(() => {
+    if (stage !== 2) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable || t.tagName === "SELECT"))
+        return;
+      if (e.key === "Enter" && interiorTool === "room" && interiorDraft.length >= 3) {
+        e.preventDefault();
+        commitRoomDraft();
+      }
+      if (e.key === "Escape" && interiorDraft.length > 0) {
+        e.preventDefault();
+        setInteriorDraft([]);
+      }
+      if ((e.key === "Backspace" || e.key === "Delete") && interiorTool === "room" && interiorDraft.length > 0) {
+        e.preventDefault();
+        setInteriorDraft((d) => d.slice(0, -1));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [stage, interiorTool, interiorDraft, commitRoomDraft]);
 
   /** 결과 패널의 세대수 ± — 목표를 바꾸고 곧바로 그 값으로 다시 생성한다. */
   const setUnitCountTarget = useCallback(
@@ -830,18 +961,56 @@ export default function EditorPage() {
             plan={plan}
             mode={mode}
             templates={listTemplates()}
+            userTemplates={userTemplates}
             interiors={interiors}
             selectedId={selectedId}
             selectedUnitIds={selectedUnitIds}
             agentMessages={agentMessages}
             agentBusy={agentBusy}
             busy={busy}
+            interiorTool={interiorTool}
+            interiorRoomKind={interiorRoomKind}
+            interiorDoorCategory={interiorDoorCategory}
+            interiorDoorWidth={interiorDoorWidth}
+            interiorFurnId={interiorFurnId}
+            interiorDraftLen={interiorDraft.length}
+            onInteriorTool={(t) => {
+              setInteriorTool(t);
+              setInteriorDraft([]);
+            }}
+            onInteriorRoomKind={setInteriorRoomKind}
+            onInteriorDoorCategory={setInteriorDoorCategory}
+            onInteriorDoorWidth={setInteriorDoorWidth}
+            onInteriorFurnId={setInteriorFurnId}
             onSelectUnit={(id) => handleSelectUnit(id, false)}
             onApplyTemplate={applyLibraryTemplate}
             onAutoFitInteriors={applyAutoInteriors}
             onClearInteriors={clearInteriors}
             onBatchDoors={batchDoorUpdate}
             onAgentSend={runArchie}
+            onStartEmptyInterior={startEmptyInterior}
+            onCommitRoomDraft={commitRoomDraft}
+            onCancelRoomDraft={() => setInteriorDraft([])}
+            onDeleteLastRoom={() =>
+              patchSelectedInterior((unit, it) => {
+                if (!it || it.rooms.length === 0) return it ?? emptyInterior(unit);
+                return removeRoom(unit, it, it.rooms[it.rooms.length - 1].id);
+              })
+            }
+            onDeleteLastDoor={() =>
+              patchSelectedInterior((unit, it) => {
+                if (!it || it.doors.length === 0) return it ?? emptyInterior(unit);
+                return removeDoor(unit, it, it.doors[it.doors.length - 1].id);
+              })
+            }
+            onDeleteLastFurn={() =>
+              patchSelectedInterior((unit, it) => {
+                if (!it || !(it.furniture && it.furniture.length)) return it ?? emptyInterior(unit);
+                const last = it.furniture[it.furniture.length - 1];
+                return removeFurniture(unit, it, last.id);
+              })
+            }
+            onSaveToLibrary={saveSelectedToLibrary}
             onBackToZoning={enterStage1}
           />
         ) : null}
@@ -877,6 +1046,19 @@ export default function EditorPage() {
           onWallMove={(edits) => void handleWallMove(edits)}
           interiors={interiors}
           highlightedUnitIds={highlightedUnitIds}
+          interiorTool={stage === 2 ? interiorTool : "select"}
+          interiorRoomKind={interiorRoomKind}
+          interiorDoorCategory={interiorDoorCategory}
+          interiorDoorWidth={interiorDoorWidth}
+          interiorFurnCatalogId={interiorFurnId}
+          interiorDraft={interiorDraft}
+          onInteriorDraftChange={setInteriorDraft}
+          onInteriorRoomCommit={(pts) => {
+            patchSelectedInterior((unit, it) => addRoom(unit, it, pts, interiorRoomKind));
+            setInteriorDraft([]);
+          }}
+          onInteriorDoorPlace={placeDoor}
+          onInteriorFurnPlace={placeFurn}
         />
 
         <MetricsPanel

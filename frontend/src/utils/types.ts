@@ -230,7 +230,18 @@ export interface CoreSpec {
 
 export type DoorType = "swing_left" | "swing_right" | "sliding" | "pocket";
 export type DoorCategory = "entrance" | "bathroom" | "bedroom" | "other";
-export type RoomKind = "living" | "bedroom" | "kitchen" | "bathroom" | "hallway" | "storage" | "other";
+export type RoomKind =
+  | "living"
+  | "dining"
+  | "bedroom"
+  | "kitchen"
+  | "bathroom"
+  | "hallway"
+  | "storage"
+  | "other";
+
+/** 2단계 내부 작도 도구 */
+export type InteriorTool = "select" | "room" | "door" | "furniture";
 
 export interface Door {
   id: string;
@@ -248,6 +259,19 @@ export interface Room {
   name: string;
   kind: RoomKind;
   polygon: Pt[];
+}
+
+/** 가구·공용 오브젝트 (영상 Public Objects 대응) */
+export interface FurnItem {
+  id: string;
+  name: string;
+  /** catalog id */
+  catalogId: string;
+  /** 중심 월드 좌표 */
+  at: Pt;
+  width: number;
+  depth: number;
+  rotation: number;
 }
 
 export interface Zone {
@@ -280,11 +304,14 @@ export interface UnitInterior {
   linkedGroupId?: string;
   rooms: Room[];
   doors: Door[];
+  furniture?: FurnItem[];
   zones?: Zone[];
   egressPath?: EgressPath;
   edges?: number;
   areaM2?: number;
   score?: UnitScore;
+  /** 사용자가 직접 작도한 데이터면 true (학습/라이브러리 후보) */
+  handAuthored?: boolean;
 }
 
 /** 라이브러리 템플릿 — 로컬 정규화 좌표(0~1) 또는 m 단위 bbox 기준. */

@@ -7,6 +7,7 @@ const MIN_AREA: Record<string, number> = {
   bedroom: 10,
   bathroom: 3.5,
   living: 12,
+  dining: 8,
   kitchen: 4,
   hallway: 1.5,
   storage: 1,
@@ -99,8 +100,10 @@ export function scoreInterior(interior: UnitInterior, unitPoly: Pt[]): UnitScore
     });
   }
 
-  // ---- Daylight: living/bedroom 외피 접함
-  const needDay = interior.rooms.filter((r) => r.kind === "living" || r.kind === "bedroom");
+  // ---- Daylight: living/bedroom/dining 외피 접함
+  const needDay = interior.rooms.filter(
+    (r) => r.kind === "living" || r.kind === "bedroom" || r.kind === "dining",
+  );
   if (needDay.length > 0) {
     const lit = needDay.filter((r) => edgeTouchesBoundary(r, unitPoly));
     const dayRatio = lit.length / needDay.length;
@@ -110,6 +113,29 @@ export function scoreInterior(interior: UnitInterior, unitPoly: Pt[]): UnitScore
         code: "DAYLIGHT",
         level: dayRatio < 0.5 ? "fail" : "warn",
         message: `일조 필요 실 ${needDay.length}개 중 ${lit.length}개만 외피 접촉`,
+      });
+    }
+  }
+
+  // ---- 프로그램: 문·실 존재
+  if (interior.rooms.length === 0) {
+    compliance -= 40;
+    checks.push({ code: "NO_ROOMS", level: "fail", message: "실이 없습니다 — 내부를 그리거나 템플릿을 적용하세요" });
+  }
+  if (!interior.doors.some((d) => d.category === "entrance") && interior.rooms.length > 0) {
+    compliance -= 10;
+    checks.push({ code: "NO_ENTRY", level: "warn", message: "현관 문이 없습니다" });
+  }
+
+  // ---- 가구가 유닛 밖이면 감점
+  const furn = interior.furniture ?? [];
+  for (const f of furn) {
+    if (!pointInPolygon(f.at, unitPoly)) {
+      compliance -= 5;
+      checks.push({
+        code: "FURN_OUT",
+        level: "warn",
+        message: `${f.name} 이(가) 유닛 밖입니다`,
       });
     }
   }

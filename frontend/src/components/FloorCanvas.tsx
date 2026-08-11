@@ -57,10 +57,13 @@ import type {
   Plan,
   Pt,
   Underlay,
+  InteriorTool,
+  RoomKind,
   Unit,
   UnitInterior,
   VertexRole,
 } from "@/utils/types";
+import { furnitureCorners } from "@/utils/interior/authoring";
 
 /** coreOutline: 코어 외곽을 사각형 대신 자유 폴리곤으로 직접 그린다. */
 export type EditMode = "view" | "boundary" | "corridor" | "core" | "coreOutline";
@@ -124,6 +127,19 @@ interface Props {
   interiors?: Record<string, UnitInterior>;
   /** AI/링크 수정 하이라이트 */
   highlightedUnitIds?: string[];
+  /** 2단계 내부 작도 도구 */
+  interiorTool?: InteriorTool;
+  interiorRoomKind?: RoomKind;
+  interiorDoorCategory?: "entrance" | "bathroom" | "bedroom" | "other";
+  interiorDoorWidth?: number;
+  interiorFurnCatalogId?: string | null;
+  /** 실 폴리곤 작도 중인 점 */
+  interiorDraft?: Pt[];
+  onInteriorDraftChange?: (pts: Pt[]) => void;
+  onInteriorRoomCommit?: (pts: Pt[]) => void;
+  onInteriorDoorPlace?: (at: Pt) => void;
+  onInteriorFurnPlace?: (at: Pt) => void;
+  onInteriorDeleteLast?: () => void;
 }
 
 /** 아키캐드 스타일 우클릭 컨텍스트 메뉴 위치 (캔버스 wrap 기준 px). */
@@ -162,6 +178,16 @@ export default function FloorCanvas({
   onWallMove,
   interiors = {},
   highlightedUnitIds = [],
+  interiorTool = "select",
+  interiorRoomKind = "living",
+  interiorDoorWidth = 0.9,
+  interiorFurnCatalogId = null,
+  interiorDraft = [],
+  onInteriorDraftChange,
+  onInteriorRoomCommit,
+  onInteriorDoorPlace,
+  onInteriorFurnPlace,
+  onInteriorDeleteLast,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -756,7 +782,30 @@ export default function FloorCanvas({
                 ctx.lineTo(sx + wPx / 2, sy);
                 ctx.stroke();
               }
+              // 문 폭 라벨 (영상 700mm 스타일)
+              if (overlays.labels) {
+                ctx.fillStyle = chrome.inkSecondary;
+                ctx.font = "10px system-ui, sans-serif";
+                ctx.fillText(`${Math.round(d.width * 1000)} mm`, sx + 4, sy - 6);
+              }
               ctx.restore();
+            }
+            // 가구
+            for (const f of it.furniture ?? []) {
+              const corners = furnitureCorners(f);
+              path(corners);
+              ctx.fillStyle = withAlpha(chrome.muted, 0.35);
+              ctx.fill();
+              ctx.strokeStyle = chrome.inkSecondary;
+              ctx.lineWidth = 1.2;
+              ctx.stroke();
+              if (overlays.labels) {
+                const [fx, fy] = toScreen(f.at);
+                ctx.fillStyle = chrome.ink;
+                ctx.font = "600 9px system-ui, sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText(f.name.replace(/\s*\d.*/, ""), fx, fy);
+              }
             }
             if (it.score && overlays.labels) {
               const [lx, ly] = toScreen(u.label_at);
@@ -1087,6 +1136,32 @@ export default function FloorCanvas({
       }
     }
 
+    // ---- 내부 실 작도 드래프트
+    if (interiorTool === "room" && interiorDraft.length > 0) {
+      ctx.strokeStyle = STATUS.good;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      interiorDraft.forEach((p, i) => {
+        const [x, y] = toScreen(p);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      if (cursor) {
+        const [x, y] = toScreen(cursor);
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      interiorDraft.forEach((p) => {
+        const [x, y] = toScreen(p);
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = STATUS.good;
+        ctx.fill();
+      });
+    }
+
     // ---- 코어 찍기 미리보기.
     //      cursor 는 이미 중심선에 붙은 좌표라, 이 사각형이 곧 배치될 자리다.
     if (editMode === "core" && cursor) {
@@ -1347,6 +1422,7 @@ export default function FloorCanvas({
     editing, rings, hoverVertex, hoverMid, nearMids, dragVertex,
     selectedId, hoverId, toScreen, toWorld, vertsOf, boundaryDense,
     underlay, underlayReady, interiors, highlightedUnitIds, selectedUnitIds,
+    interiorTool, interiorDraft,
   ]);
 
   // ------------------------------------------------------------ 마우스 조작
@@ -1551,6 +1627,34 @@ export default function FloorCanvas({
           }
         }
       }
+      // 2단계 내부 작도
+      if (interiorTool === "room" && onInteriorDraftChange && selectedId) {
+        const u = plan?.units.find((x) => x.id === selectedId);
+        if (u && pointInPolygon(w, u.polygon)) {
+          // 첫 점 근처 더블/클릭 폐합
+          if (
+            interiorDraft.length >= 3 &&
+            Math.hypot(w[0] - interiorDraft[0][0], w[1] - interiorDraft[0][1]) < 0.45
+          ) {
+            onInteriorRoomCommit?.(interiorDraft);
+            return;
+          }
+          onInteriorDraftChange([...interiorDraft, w]);
+          return;
+        }
+      }
+      if (interiorTool === "door" && onInteriorDoorPlace && selectedId) {
+        onInteriorDoorPlace(w);
+        return;
+      }
+      if (interiorTool === "furniture" && onInteriorFurnPlace && selectedId) {
+        const u = plan?.units.find((x) => x.id === selectedId);
+        if (u && pointInPolygon(w, u.polygon)) {
+          onInteriorFurnPlace(w);
+          return;
+        }
+      }
+
       onSelectCore(null);
       onSelect(hitTest(w)?.id ?? null, e.shiftKey);
       return;
@@ -1624,6 +1728,8 @@ export default function FloorCanvas({
                 ? "copy"
                 : snap
                   ? "pointer"
+                  : interiorTool !== "select"
+                    ? "crosshair"
                   : editMode === "view"
                     ? "default"
                     : "crosshair",
@@ -1769,6 +1875,24 @@ export default function FloorCanvas({
             : "복도 중심선이 아직 없습니다 — 먼저 평면을 생성하거나 중심선을 그리세요"}
           <em>우클릭 확인/취소 · Esc 종료</em>
         </div>
+      )}
+
+      {editMode === "view" && interiorTool === "room" && selectedId && !ctxMenu && (
+        <div className="drawHint snap">
+          실 그리기 ({interiorRoomKind}) · {interiorDraft.length}점
+          <em>첫 점 근처 클릭으로 닫기 · Enter 확정 · Esc 취소</em>
+        </div>
+      )}
+      {editMode === "view" && interiorTool === "door" && selectedId && !ctxMenu && (
+        <div className="drawHint">
+          문 배치 · 유닛 외곽 클릭 ({Math.round((interiorDoorWidth ?? 0.9) * 1000)} mm)
+        </div>
+      )}
+      {editMode === "view" && interiorTool === "furniture" && selectedId && !ctxMenu && (
+        <div className="drawHint">가구 배치 · 유닛 안 클릭</div>
+      )}
+      {editMode === "view" && interiorTool !== "select" && !selectedId && !ctxMenu && (
+        <div className="drawHint bad">내부 작도 — 먼저 유닛을 선택하세요</div>
       )}
 
       {editMode !== "view" && editMode !== "core" && !ctxMenu && (
