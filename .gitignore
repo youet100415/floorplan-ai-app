@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+.env*.local
+
+# local temp / frame dumps
+.tmp-*/
+.tmp-frames/
+.tmp-video-frames/
+
+# sqlite runtime sidecars (DB 파일 자체는 프로젝트 데이터로 보관 가능)
+*.db-shm
+*.db-wal
