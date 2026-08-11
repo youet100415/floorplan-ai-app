@@ -23,6 +23,8 @@ import {
   listTemplates,
   pickTemplateForType,
   populationFromUnits,
+  runAgentLocal,
+  type AgentMessage,
 } from "@/utils/interior";
 import { asCorners } from "@/utils/path";
 import { makeDoc, type ProjectDoc } from "@/utils/project";
@@ -100,8 +102,12 @@ export default function EditorPage() {
   const [interiors, setInteriors] = useState<Record<string, UnitInterior>>({});
   const [highlightedUnitIds, setHighlightedUnitIds] = useState<string[]>([]);
   const [agentLog, setAgentLog] = useState<string[]>([]);
+  const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([]);
+  const [agentBusy, setAgentBusy] = useState(false);
   /** 1=조닝 · 2=내부 평면 (영상처럼 탭으로 전환) */
   const [stage, setStage] = useState<1 | 2>(1);
+
+  const agentId = () => `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
   // ------------------------------------------------------------ 프로젝트 저장
   const [projectName, setProjectName] = useState("제목 없음");
@@ -175,6 +181,7 @@ export default function EditorPage() {
         setInteriors({});
         setHighlightedUnitIds([]);
         setAgentLog([]);
+        setAgentMessages([]);
         // 생성 직후에는 1단계에 머물고, 상단/하단 CTA 로 2단계 진입
         setStage(1);
       } catch (e) {
@@ -370,14 +377,90 @@ export default function EditorPage() {
       egress: true,
     }));
     setError(null);
-    // 내부가 하나도 없으면 타입별 자동 적용 안내 로그만
-    if (Object.keys(interiors).length === 0) {
-      setAgentLog((logs) => [
-        "2단계 진입 — 라이브러리에서 템플릿을 골라 유닛에 적용하세요. 또는 「타입별 자동 배치」.",
-        ...logs,
-      ].slice(0, 12));
+    if (agentMessages.length === 0) {
+      setAgentMessages([
+        {
+          id: agentId(),
+          role: "agent",
+          text:
+            "안녕하세요. Archie입니다. 유닛에 템플릿을 적용한 뒤, 욕실·현관 문을 자연어로 일괄 수정할 수 있습니다.",
+          details: [
+            "예: 모든 욕실·현관 문을 스윙으로. 욕실 34인치, 현관 36인치",
+            "예: 타입별 자동 배치",
+          ],
+        },
+      ]);
     }
-  }, [plan, interiors]);
+  }, [plan, agentMessages.length]);
+
+  const runArchie = useCallback(
+    (text: string) => {
+      if (!plan) return;
+      const userMsg: AgentMessage = { id: agentId(), role: "user", text };
+      setAgentMessages((prev) => [...prev, userMsg]);
+      setAgentBusy(true);
+
+      // 짧은 딜레이로 영상처럼 "연산 중" 체감
+      window.setTimeout(() => {
+        const polys: Record<string, Pt[]> = {};
+        for (const u of plan.units) polys[u.id] = u.polygon;
+
+        let current = interiors;
+        // 문 변경인데 내부가 없으면 영상처럼 먼저 템플릿을 깔고 진행
+        if (Object.keys(current).length === 0 && /문|door|스윙|swing|욕실|현관|bath|entrance/i.test(text)) {
+          current = autoFitAll(plan.units, pickTemplateForType);
+        }
+
+        let result = runAgentLocal(text, current, polys, {
+          onApplyAuto: () => autoFitAll(plan.units, pickTemplateForType),
+        });
+        // 파서가 update_doors 인데 여전히 비면 자동 배치 후 재시도
+        if (!result.ok && Object.keys(result.nextInteriors).length === 0) {
+          current = autoFitAll(plan.units, pickTemplateForType);
+          result = runAgentLocal(text, current, polys, {
+            onApplyAuto: () => autoFitAll(plan.units, pickTemplateForType),
+          });
+        }
+
+        setInteriors(result.nextInteriors);
+        if (result.updatedUnitIds.length > 0) {
+          setHighlightedUnitIds(result.updatedUnitIds);
+          setOverlays((o) => ({ ...o, interiors: true, zones: true }));
+          window.setTimeout(() => setHighlightedUnitIds([]), 2800);
+        }
+
+        const details = result.details.slice(0, 16);
+        const agentMsg: AgentMessage = {
+          id: agentId(),
+          role: "agent",
+          text: result.summary,
+          details: details.length > 0 ? details : undefined,
+          summaryCard: result.ok
+            ? {
+                title: "Changes Made",
+                changes: [
+                  result.summary,
+                  result.doorCounts.total > 0
+                    ? `Bathroom doors: ${result.doorCounts.bathroom} · Entrance: ${result.doorCounts.entrance} · Total: ${result.doorCounts.total}`
+                    : `Updated units: ${result.updatedUnitIds.length}`,
+                ],
+                unitIds: result.updatedUnitIds,
+                doorCounts: {
+                  bathroom: result.doorCounts.bathroom,
+                  entrance: result.doorCounts.entrance,
+                  total: result.doorCounts.total,
+                },
+              }
+            : undefined,
+        };
+        setAgentMessages((prev) => [...prev, agentMsg]);
+        setAgentLog((logs) => [result.summary, ...logs].slice(0, 12));
+        setAgentBusy(false);
+        setError(null);
+      }, 450);
+    },
+    [plan, interiors],
+  );
 
   const enterStage1 = useCallback(() => {
     setStage(1);
@@ -750,13 +833,15 @@ export default function EditorPage() {
             interiors={interiors}
             selectedId={selectedId}
             selectedUnitIds={selectedUnitIds}
-            agentLog={agentLog}
+            agentMessages={agentMessages}
+            agentBusy={agentBusy}
             busy={busy}
             onSelectUnit={(id) => handleSelectUnit(id, false)}
             onApplyTemplate={applyLibraryTemplate}
             onAutoFitInteriors={applyAutoInteriors}
             onClearInteriors={clearInteriors}
             onBatchDoors={batchDoorUpdate}
+            onAgentSend={runArchie}
             onBackToZoning={enterStage1}
           />
         ) : null}

@@ -1,8 +1,10 @@
 "use client";
 
-/** 2단계 전용 좌측 패널 — 라이브러리 · 유닛 목록 · 문 일괄 · 점수 (Finch 스타일). */
+/** 2단계 전용 좌측 패널 — Archie 채팅 · 라이브러리 · 유닛 (Finch 스타일). */
 
 import { useState } from "react";
+import AIAgentChat from "@/components/AIAgentChat";
+import type { AgentMessage } from "@/utils/interior/agent";
 import { seriesColor, type Mode } from "@/utils/palette";
 import type { DoorType, Plan, UnitInterior, UnitTemplate } from "@/utils/types";
 
@@ -15,7 +17,8 @@ interface Props {
   interiors: Record<string, UnitInterior>;
   selectedId: string | null;
   selectedUnitIds: string[];
-  agentLog: string[];
+  agentMessages: AgentMessage[];
+  agentBusy: boolean;
   busy: boolean;
   onSelectUnit: (id: string | null) => void;
   onApplyTemplate: (templateId: string, scope: Scope) => void;
@@ -26,6 +29,7 @@ interface Props {
     width: number,
     type?: DoorType,
   ) => void;
+  onAgentSend: (text: string) => void;
   onBackToZoning: () => void;
 }
 
@@ -36,13 +40,15 @@ export default function InteriorPanel({
   interiors,
   selectedId,
   selectedUnitIds,
-  agentLog,
+  agentMessages,
+  agentBusy,
   busy,
   onSelectUnit,
   onApplyTemplate,
   onAutoFitInteriors,
   onClearInteriors,
   onBatchDoors,
+  onAgentSend,
   onBackToZoning,
 }: Props) {
   const [libTpl, setLibTpl] = useState(templates[0]?.id ?? "1BR_A");
@@ -54,8 +60,8 @@ export default function InteriorPanel({
     <aside className="sidebar panel interiorPanel">
       <div className="stageBanner stage2">
         <div>
-          <strong>2단계 · 내부 평면</strong>
-          <p>유닛에 라이브러리 도면을 끼우고 점수·문을 다듬습니다.</p>
+          <strong>2단계 · 내부 평면 · Archie</strong>
+          <p>라이브러리 적용 후, 자연어로 링크 유닛 문을 일괄 수정합니다.</p>
         </div>
         <button type="button" className="ghost compact" onClick={onBackToZoning}>
           ← 1단계
@@ -63,6 +69,20 @@ export default function InteriorPanel({
       </div>
 
       <div className="panelBody">
+        <section className="archieSection">
+          <AIAgentChat
+            messages={agentMessages}
+            busy={agentBusy}
+            disabled={false}
+            disabledHint={
+              interiorsCount === 0
+                ? "아래 라이브러리로 템플릿을 먼저 적용하면 문 변경이 가능합니다. 「타입별 자동 배치」 또는 채팅에 자동 배치를 요청하세요."
+                : undefined
+            }
+            onSend={onAgentSend}
+          />
+        </section>
+
         <section>
           <h2>라이브러리</h2>
           <p className="note">Finch Plan Library처럼 타입별 평면을 유닛에 맞춥니다.</p>
@@ -232,21 +252,6 @@ export default function InteriorPanel({
           </section>
         )}
 
-        <section className="agentSection">
-          <h2>작업 로그</h2>
-          {agentLog.length === 0 ? (
-            <p className="note">템플릿 적용 · 문 변경 기록이 여기에 쌓입니다.</p>
-          ) : (
-            <ul className="agentLog chatStyle">
-              {agentLog.map((line, i) => (
-                <li key={i}>
-                  <span className="agentWho">System</span>
-                  {line}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
       </div>
     </aside>
   );
