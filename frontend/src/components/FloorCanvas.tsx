@@ -58,6 +58,7 @@ import type {
   Pt,
   Underlay,
   Unit,
+  UnitInterior,
   VertexRole,
 } from "@/utils/types";
 
@@ -73,6 +74,12 @@ export interface Overlays {
   grid: boolean;
   /** 도면 밑깔기 표시 */
   underlay: boolean;
+  /** 내부 실·문 표시 */
+  interiors: boolean;
+  /** GFA / 세대 / 방 존 오버레이 */
+  zones: boolean;
+  /** 유닛 내부 피난 직선 */
+  egress: boolean;
 }
 
 interface Props {
@@ -113,6 +120,10 @@ interface Props {
   selectedUnitIds: string[];
   /** 공유 벽 드래그를 놓았을 때 — 바뀐 두 세대의 새 폴리곤만 넘긴다. */
   onWallMove: (edits: { id: string; polygon: Pt[] }[]) => void;
+  /** 유닛별 내부 평면 (2단계). */
+  interiors?: Record<string, UnitInterior>;
+  /** AI/링크 수정 하이라이트 */
+  highlightedUnitIds?: string[];
 }
 
 /** 아키캐드 스타일 우클릭 컨텍스트 메뉴 위치 (캔버스 wrap 기준 px). */
@@ -149,6 +160,8 @@ export default function FloorCanvas({
   onSelect,
   selectedUnitIds,
   onWallMove,
+  interiors = {},
+  highlightedUnitIds = [],
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -674,9 +687,108 @@ export default function FloorCanvas({
         ctx.fillStyle = withAlpha(base, mode === "light" ? 0.28 : 0.34);
         ctx.fill();
         // 인접 세대 사이가 붙어 보이지 않도록 면 위에 같은 색 실선 테두리
-        ctx.strokeStyle = base;
-        ctx.lineWidth = u.id === selectedId ? 3 : u.id === hoverId ? 2.5 : 1.5;
+        const multi = selectedUnitIds.includes(u.id);
+        const hi = highlightedUnitIds.includes(u.id);
+        ctx.strokeStyle = hi ? "#2b56f0" : base;
+        ctx.lineWidth =
+          u.id === selectedId || multi ? 3 : u.id === hoverId ? 2.5 : hi ? 2.5 : 1.5;
         ctx.stroke();
+        if (hi) {
+          path(u.polygon);
+          ctx.fillStyle = "rgba(43, 86, 240, 0.12)";
+          ctx.fill();
+        }
+      }
+
+      // ---- 내부 평면 (실 · 존 · 문 · 피난)
+      if (overlays.interiors || overlays.zones || overlays.egress) {
+        for (const u of plan.units) {
+          const it = interiors[u.id];
+          if (!it) continue;
+
+          if (overlays.zones && it.zones) {
+            for (const z of it.zones) {
+              if (z.category === "apartment" && !overlays.zones) continue;
+              path(z.polygon);
+              ctx.fillStyle = z.color;
+              ctx.fill();
+            }
+          }
+
+          if (overlays.interiors) {
+            for (const r of it.rooms) {
+              path(r.polygon);
+              ctx.fillStyle = withAlpha(seriesColor(mode, r.kind === "living" ? 0 : r.kind === "bedroom" ? 2 : 1), 0.2);
+              ctx.fill();
+              ctx.strokeStyle = withAlpha(chrome.ink, 0.35);
+              ctx.lineWidth = 1;
+              ctx.stroke();
+              if (overlays.labels && r.polygon.length >= 3) {
+                const cx = r.polygon.reduce((s, p) => s + p[0], 0) / r.polygon.length;
+                const cy = r.polygon.reduce((s, p) => s + p[1], 0) / r.polygon.length;
+                const [sx, sy] = toScreen([cx, cy]);
+                ctx.fillStyle = chrome.inkSecondary;
+                ctx.font = "600 10px system-ui, sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(r.name, sx, sy);
+              }
+            }
+            for (const d of it.doors) {
+              const [sx, sy] = toScreen(d.position);
+              const wPx = d.width * view.scale;
+              ctx.save();
+              ctx.strokeStyle = d.category === "entrance" ? STATUS.critical : "#2b56f0";
+              ctx.lineWidth = 2;
+              if (d.type.startsWith("swing")) {
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(sx + wPx * 0.15, sy - wPx);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.setLineDash([3, 3]);
+                ctx.arc(sx, sy, wPx, -Math.PI / 2, 0, false);
+                ctx.stroke();
+                ctx.setLineDash([]);
+              } else {
+                ctx.beginPath();
+                ctx.moveTo(sx - wPx / 2, sy);
+                ctx.lineTo(sx + wPx / 2, sy);
+                ctx.stroke();
+              }
+              ctx.restore();
+            }
+            if (it.score && overlays.labels) {
+              const [lx, ly] = toScreen(u.label_at);
+              ctx.fillStyle = "#2b56f0";
+              ctx.font = "bold 11px system-ui, sans-serif";
+              ctx.textAlign = "left";
+              ctx.fillText(`${it.score.total}%`, lx + 8, ly - 12);
+            }
+          }
+
+          if (overlays.egress && it.egressPath) {
+            const ep = it.egressPath;
+            const [a, b] = [toScreen(ep.startPoint), toScreen(ep.exitPoint)];
+            ctx.save();
+            ctx.strokeStyle = "#ff6b00";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(a[0], a[1]);
+            ctx.lineTo(b[0], b[1]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = "#ff6b00";
+            ctx.font = "bold 11px system-ui, sans-serif";
+            ctx.fillText(
+              `${ep.distanceMeters.toFixed(1)}m`,
+              (a[0] + b[0]) / 2 + 4,
+              (a[1] + b[1]) / 2 - 4,
+            );
+            ctx.restore();
+          }
+        }
       }
 
       // ---- 복도
@@ -1234,7 +1346,7 @@ export default function FloorCanvas({
     cursor, snap, inputBoundary, inputCorridors, inputCores, corridorWidth, geometryDirty,
     editing, rings, hoverVertex, hoverMid, nearMids, dragVertex,
     selectedId, hoverId, toScreen, toWorld, vertsOf, boundaryDense,
-    underlay, underlayReady,
+    underlay, underlayReady, interiors, highlightedUnitIds, selectedUnitIds,
   ]);
 
   // ------------------------------------------------------------ 마우스 조작
@@ -1440,7 +1552,7 @@ export default function FloorCanvas({
         }
       }
       onSelectCore(null);
-      onSelect(hitTest(w)?.id ?? null);
+      onSelect(hitTest(w)?.id ?? null, e.shiftKey);
       return;
     }
     if (editMode === "core") {

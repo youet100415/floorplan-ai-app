@@ -275,6 +275,71 @@ button.danger:hover:not(:disabled) {
 .exploreRow { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; }
 .exploreRow input { accent-color: var(--accent); }
 
+.fullSelect {
+  width: 100%;
+  margin-top: 6px;
+  padding: 7px 8px;
+  background: var(--plane);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.scoreGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.scoreGrid > div {
+  padding: 8px;
+  background: var(--plane);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.scoreGrid span { font-size: 11px; color: var(--muted); }
+.scoreGrid strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+
+.miniChecks {
+  list-style: none; margin: 10px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px;
+}
+.miniChecks li {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--plane);
+  border-left: 3px solid var(--muted);
+}
+.miniChecks li.pass { border-left-color: var(--good); }
+.miniChecks li.warn { border-left-color: var(--warning); }
+.miniChecks li.fail { border-left-color: var(--critical); }
+
+.agentLog {
+  list-style: none; margin: 0; padding: 0;
+  font-size: 11px; color: var(--ink-2);
+  max-height: 140px; overflow-y: auto;
+}
+.agentLog li {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.popChart {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  background: var(--plane);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+button.ghost.danger {
+  color: var(--critical);
+  border-color: color-mix(in srgb, var(--critical) 35%, var(--border));
+}
+
 /* -------------------------------------------------------------------- 캔버스 */
 .canvasWrap { position: relative; min-width: 0; background: var(--surface); overflow: hidden; }
 .canvasWrap canvas { display: block; }

@@ -1,12 +1,12 @@
 "use client";
 
-/** 우측 결과 패널 — 지표 / 검토 / 대안 탭. */
+/** 우측 결과 패널 — 지표 / 검토 / 대안 / 분석 탭. */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { seriesColor, type Mode } from "@/utils/palette";
-import type { Check, Plan } from "@/utils/types";
+import type { Check, Plan, PopulationPoint, UnitInterior } from "@/utils/types";
 
-type MetricsTab = "summary" | "checks" | "options";
+type MetricsTab = "summary" | "checks" | "options" | "analysis";
 
 const LEVEL_LABEL: Record<Check["level"], string> = {
   pass: "적합",
@@ -97,6 +97,9 @@ export default function MetricsPanel({
   unitCountTarget,
   onUnitCountTarget,
   busy,
+  interiors = {},
+  selectedId = null,
+  population = [],
 }: {
   plan: Plan | null;
   mode: Mode;
@@ -106,9 +109,17 @@ export default function MetricsPanel({
   unitCountTarget: number | null;
   onUnitCountTarget: (n: number | null) => void;
   busy: boolean;
+  interiors?: Record<string, UnitInterior>;
+  selectedId?: string | null;
+  population?: PopulationPoint[];
 }) {
   const [tab, setTab] = useState<MetricsTab>("summary");
   const hasOptions = options.length > 1;
+  const interiorList = useMemo(() => Object.values(interiors), [interiors]);
+  const avgInterior =
+    interiorList.length === 0
+      ? null
+      : interiorList.reduce((s, i) => s + (i.score?.total ?? 0), 0) / interiorList.length;
 
   // 대안 탐색 결과가 생기면 대안 탭으로 안내
   useEffect(() => {
@@ -127,6 +138,9 @@ export default function MetricsPanel({
           </button>
           <button type="button" className="panelTab" disabled>
             대안
+          </button>
+          <button type="button" className="panelTab" disabled>
+            분석
           </button>
         </nav>
         <div className="panelBody emptyHint">
@@ -176,6 +190,16 @@ export default function MetricsPanel({
         >
           대안
           {hasOptions && <span className="tabBadge">{options.length}</span>}
+        </button>
+        <button
+          type="button"
+          className={`panelTab${tab === "analysis" ? " on" : ""}`}
+          onClick={() => setTab("analysis")}
+        >
+          분석
+          {interiorList.length > 0 && (
+            <span className="tabBadge">{interiorList.length}</span>
+          )}
         </button>
       </nav>
 
@@ -339,7 +363,135 @@ export default function MetricsPanel({
             <p className="legendNote">행을 클릭하면 해당 대안이 도면에 표시됩니다.</p>
           </section>
         )}
+
+        {tab === "analysis" && (
+          <>
+            <section>
+              <h2>내부 평면 점수</h2>
+              {interiorList.length === 0 ? (
+                <p className="note">
+                  좌측 <strong>내부</strong> 탭에서 라이브러리 템플릿을 적용하면
+                  Compliance / Adaptivity / Daylight 점수가 집계됩니다.
+                </p>
+              ) : (
+                <>
+                  <div className="statGrid">
+                    <Stat
+                      label="적용 유닛"
+                      value={String(interiorList.length)}
+                      unit="호"
+                    />
+                    <Stat
+                      label="평균 내부점수"
+                      value={avgInterior != null ? avgInterior.toFixed(1) : "—"}
+                      unit="%"
+                    />
+                  </div>
+                  {selectedId && interiors[selectedId]?.score && (
+                    <div className="scoreGrid" style={{ marginTop: 10 }}>
+                      <div>
+                        <span>선택 종합</span>
+                        <strong>{interiors[selectedId].score!.total}%</strong>
+                      </div>
+                      <div>
+                        <span>C</span>
+                        <strong>{interiors[selectedId].score!.compliance}</strong>
+                      </div>
+                      <div>
+                        <span>A</span>
+                        <strong>{interiors[selectedId].score!.adaptivity}</strong>
+                      </div>
+                      <div>
+                        <span>D</span>
+                        <strong>{interiors[selectedId].score!.daylight}</strong>
+                      </div>
+                    </div>
+                  )}
+                  {selectedId && interiors[selectedId]?.egressPath && (
+                    <p className="note" style={{ marginTop: 8 }}>
+                      피난(직선){" "}
+                      <strong>
+                        {interiors[selectedId].egressPath!.distanceMeters.toFixed(1)} m
+                      </strong>
+                    </p>
+                  )}
+                </>
+              )}
+            </section>
+
+            <section>
+              <h2>Population (면적 × 모서리)</h2>
+              <PopulationScatter
+                points={population}
+                currentId={selectedId}
+                mode={mode}
+              />
+              <p className="legendNote">빨간 점 = 선택 유닛 · 회색 = 전체 세대</p>
+            </section>
+          </>
+        )}
       </div>
     </aside>
+  );
+}
+
+function PopulationScatter({
+  points,
+  currentId,
+  mode,
+}: {
+  points: PopulationPoint[];
+  currentId: string | null;
+  mode: Mode;
+}) {
+  if (points.length === 0) {
+    return <p className="note">생성 결과가 없습니다.</p>;
+  }
+  const maxA = Math.max(...points.map((p) => p.areaM2), 1);
+  const maxE = Math.max(...points.map((p) => p.edges), 4);
+  const minE = Math.min(...points.map((p) => p.edges), 3);
+  const w = 280;
+  const h = 160;
+  const pad = 28;
+  const xOf = (a: number) => pad + (a / maxA) * (w - pad * 1.4);
+  const yOf = (e: number) =>
+    h - pad - ((e - minE) / Math.max(maxE - minE, 1)) * (h - pad * 1.5);
+
+  return (
+    <svg className="popChart" viewBox={`0 0 ${w} ${h}`} width="100%" height={h}>
+      <line x1={pad} y1={h - pad} x2={w - 8} y2={h - pad} stroke="currentColor" opacity={0.2} />
+      <line x1={pad} y1={12} x2={pad} y2={h - pad} stroke="currentColor" opacity={0.2} />
+      <text x={w / 2} y={h - 6} textAnchor="middle" fontSize="10" fill="currentColor" opacity={0.55}>
+        Area m²
+      </text>
+      <text
+        x={12}
+        y={h / 2}
+        textAnchor="middle"
+        fontSize="10"
+        fill="currentColor"
+        opacity={0.55}
+        transform={`rotate(-90 12 ${h / 2})`}
+      >
+        Edges
+      </text>
+      {points.map((p) => {
+        const cur = p.id === currentId;
+        return (
+          <circle
+            key={p.id}
+            cx={xOf(p.areaM2)}
+            cy={yOf(p.edges)}
+            r={cur ? 6 : 3.5}
+            fill={cur ? "#e53935" : mode === "light" ? "#7c8db5" : "#9aa8c7"}
+            opacity={cur ? 1 : 0.55}
+          >
+            <title>
+              {p.id} · {p.areaM2}m² · {p.edges} edges
+            </title>
+          </circle>
+        );
+      })}
+    </svg>
   );
 }

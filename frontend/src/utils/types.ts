@@ -225,3 +225,91 @@ export interface CoreSpec {
   /** 자유 외곽선(≥3점). 있으면 사각형 대신 사용 */
   outline: Pt[] | null;
 }
+
+// ------------------------------------------------------------------ 2단계: 내부 평면 · 라이브러리 · 분석
+
+export type DoorType = "swing_left" | "swing_right" | "sliding" | "pocket";
+export type DoorCategory = "entrance" | "bathroom" | "bedroom" | "other";
+export type RoomKind = "living" | "bedroom" | "kitchen" | "bathroom" | "hallway" | "storage" | "other";
+
+export interface Door {
+  id: string;
+  unitId: string;
+  category: DoorCategory;
+  position: Pt;
+  width: number;
+  type: DoorType;
+  /** 문 방향(라디안). 생략 시 자동 */
+  angle?: number;
+}
+
+export interface Room {
+  id: string;
+  name: string;
+  kind: RoomKind;
+  polygon: Pt[];
+}
+
+export interface Zone {
+  id: string;
+  label: string;
+  category: "gfa" | "apartment" | "room";
+  polygon: Pt[];
+  color: string;
+}
+
+export interface EgressPath {
+  startPoint: Pt;
+  exitPoint: Pt;
+  waypoints?: Pt[];
+  distanceMeters: number;
+}
+
+export interface UnitScore {
+  total: number;
+  compliance: number;
+  adaptivity: number;
+  daylight: number;
+  checks: { code: string; level: "pass" | "warn" | "fail"; message: string }[];
+}
+
+/** 유닛에 적용된 내부 평면(월드 좌표). */
+export interface UnitInterior {
+  unitId: string;
+  templateId: string | null;
+  linkedGroupId?: string;
+  rooms: Room[];
+  doors: Door[];
+  zones?: Zone[];
+  egressPath?: EgressPath;
+  edges?: number;
+  areaM2?: number;
+  score?: UnitScore;
+}
+
+/** 라이브러리 템플릿 — 로컬 정규화 좌표(0~1) 또는 m 단위 bbox 기준. */
+export interface UnitTemplate {
+  id: string;
+  name: string;
+  /** 대상 유닛 타입 힌트 (1BR, 2BR…) */
+  unitTypeHint?: string;
+  version: number;
+  /** 로컬 좌표계 가로·세로 (m). rooms/doors 는 이 박스 안. */
+  bbox: { w: number; d: number };
+  entry: { side: "south" | "north" | "east" | "west"; offset: number; width: number };
+  rooms: { id: string; name: string; kind: RoomKind; polygon: Pt[] }[];
+  doors: {
+    id: string;
+    category: DoorCategory;
+    type: DoorType;
+    width: number;
+    at: Pt;
+  }[];
+}
+
+export interface PopulationPoint {
+  id: string;
+  areaM2: number;
+  edges: number;
+  type?: string;
+}

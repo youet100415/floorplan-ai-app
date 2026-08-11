@@ -2,11 +2,27 @@
 
 /** 메인 에디터 페이지 — 상태를 보관하고 캔버스/사이드바/지표 패널을 연결한다. */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FloorCanvas, { type EditMode, type Overlays } from "@/components/FloorCanvas";
 import MetricsPanel from "@/components/MetricsPanel";
 import Sidebar from "@/components/Sidebar";
-import { API_BASE, explorePlans, fetchPresets, generatePlan, type Presets } from "@/utils/api";
+import {
+  API_BASE,
+  explorePlans,
+  fetchPresets,
+  generatePlan,
+  revisePlan,
+  type Presets,
+} from "@/utils/api";
+import {
+  autoFitAll,
+  batchUpdateDoors,
+  fitTemplateToUnit,
+  getTemplate,
+  listTemplates,
+  pickTemplateForType,
+  populationFromUnits,
+} from "@/utils/interior";
 import { asCorners } from "@/utils/path";
 import { makeDoc, type ProjectDoc } from "@/utils/project";
 import { loadAutosave, saveAutosave } from "@/utils/storage";
@@ -14,11 +30,13 @@ import type { Mode } from "@/utils/palette";
 import type {
   CoreSpec,
   CorridorPath,
+  DoorType,
   GenerateParams,
   PathVertex,
   Plan,
   Pt,
   Underlay,
+  UnitInterior,
   VertexRole,
 } from "@/utils/types";
 
@@ -74,8 +92,13 @@ export default function EditorPage() {
   const [nextRole, setNextRole] = useState<VertexRole>("corner");
   const [underlay, setUnderlay] = useState<Underlay | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
   /** 크기 편집 대상 코어. 도면에서 사각 핸들을 클릭하면 지정된다. */
   const [selectedCoreId, setSelectedCoreId] = useState<string | null>(null);
+  /** 유닛별 내부 평면 (2단계 라이브러리 적용 결과). */
+  const [interiors, setInteriors] = useState<Record<string, UnitInterior>>({});
+  const [highlightedUnitIds, setHighlightedUnitIds] = useState<string[]>([]);
+  const [agentLog, setAgentLog] = useState<string[]>([]);
 
   // ------------------------------------------------------------ 프로젝트 저장
   const [projectName, setProjectName] = useState("제목 없음");
@@ -91,6 +114,9 @@ export default function EditorPage() {
     doors: true,
     grid: true,
     underlay: true,
+    interiors: true,
+    zones: true,
+    egress: false,
   });
 
   const [themeLocked, setThemeLocked] = useState(false);
@@ -142,6 +168,10 @@ export default function EditorPage() {
         }
         setGeneratedFrom(JSON.stringify(p));
         setSelectedId(null);
+        setSelectedUnitIds([]);
+        setInteriors({});
+        setHighlightedUnitIds([]);
+        setAgentLog([]);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -150,6 +180,173 @@ export default function EditorPage() {
     },
     [params, variants],
   );
+
+  const handleSelectUnit = useCallback((id: string | null, additive?: boolean) => {
+    if (!id) {
+      setSelectedId(null);
+      if (!additive) setSelectedUnitIds([]);
+      return;
+    }
+    setSelectedId(id);
+    setSelectedUnitIds((prev) => {
+      if (additive) {
+        return prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      }
+      return [id];
+    });
+  }, []);
+
+  const handleWallMove = useCallback(
+    async (edits: { id: string; polygon: Pt[] }[]) => {
+      if (!plan || edits.length === 0) return;
+      const map = new Map(edits.map((e) => [e.id, e.polygon]));
+      const units = plan.units.map((u) => ({
+        id: u.id,
+        type: u.type,
+        polygon: map.get(u.id) ?? u.polygon,
+      }));
+      setBusy(true);
+      setError(null);
+      try {
+        const next = await revisePlan(
+          plan,
+          params.unit_mix,
+          {
+            max_travel_distance: params.max_travel_distance,
+            min_facade_width: params.min_facade_width,
+            wall_thickness_external: params.wall_thickness_external,
+            wall_thickness_internal: params.wall_thickness_internal,
+          },
+          units,
+        );
+        setPlan(next);
+        setOptions([]);
+        // 내부 평면은 폴리곤이 바뀌면 무효 — 같은 템플릿 있으면 재피팅
+        setInteriors((prev) => {
+          const out: Record<string, UnitInterior> = {};
+          for (const u of next.units) {
+            const old = prev[u.id];
+            if (old?.templateId) {
+              const tpl = getTemplate(old.templateId);
+              if (tpl) out[u.id] = fitTemplateToUnit(u, tpl);
+            }
+          }
+          return out;
+        });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [plan, params],
+  );
+
+  const applyLibraryTemplate = useCallback(
+    (templateId: string, scope: "selected" | "type" | "all") => {
+      if (!plan) {
+        setError("먼저 평면을 생성하세요.");
+        return;
+      }
+      const tpl = getTemplate(templateId);
+      if (!tpl) return;
+      const targets =
+        scope === "all"
+          ? plan.units
+          : scope === "selected"
+            ? plan.units.filter((u) => selectedUnitIds.includes(u.id) || u.id === selectedId)
+            : plan.units.filter(
+                (u) =>
+                  u.type.toUpperCase().includes((tpl.unitTypeHint ?? "").toUpperCase()) ||
+                  (tpl.unitTypeHint ?? "") === "",
+              );
+      if (targets.length === 0) {
+        setError("적용할 유닛이 없습니다. 도면에서 세대를 선택하세요.");
+        return;
+      }
+      setInteriors((prev) => {
+        const next = { ...prev };
+        for (const u of targets) next[u.id] = fitTemplateToUnit(u, tpl);
+        return next;
+      });
+      setOverlays((o) => ({ ...o, interiors: true, zones: true }));
+      setHighlightedUnitIds(targets.map((u) => u.id));
+      setAgentLog((logs) => [
+        `${tpl.name} → ${targets.length}개 유닛 적용 (${scope})`,
+        ...logs,
+      ].slice(0, 12));
+      setError(null);
+      window.setTimeout(() => setHighlightedUnitIds([]), 2200);
+    },
+    [plan, selectedId, selectedUnitIds],
+  );
+
+  const applyAutoInteriors = useCallback(() => {
+    if (!plan) {
+      setError("먼저 평면을 생성하세요.");
+      return;
+    }
+    const next = autoFitAll(plan.units, pickTemplateForType);
+    setInteriors(next);
+    setOverlays((o) => ({ ...o, interiors: true, zones: true }));
+    setHighlightedUnitIds(plan.units.map((u) => u.id));
+    setAgentLog((logs) => [`타입별 자동 템플릿 ${plan.units.length}호 적용`, ...logs].slice(0, 12));
+    window.setTimeout(() => setHighlightedUnitIds([]), 2200);
+  }, [plan]);
+
+  const clearInteriors = useCallback(() => {
+    setInteriors({});
+    setAgentLog((logs) => ["내부 평면 모두 제거", ...logs].slice(0, 12));
+  }, []);
+
+  const batchDoorUpdate = useCallback(
+    (
+      category: "all" | "entrance" | "bathroom" | "bedroom",
+      width: number,
+      type: DoorType = "swing_left",
+    ) => {
+      if (!plan) return;
+      const groups = new Set(
+        Object.values(interiors)
+          .map((i) => i.linkedGroupId ?? i.templateId)
+          .filter(Boolean) as string[],
+      );
+      if (groups.size === 0) {
+        setError("내부 평면이 없습니다. 라이브러리를 먼저 적용하세요.");
+        return;
+      }
+      const polys: Record<string, Pt[]> = {};
+      for (const u of plan.units) polys[u.id] = u.polygon;
+      let merged = { ...interiors };
+      const allLogs: string[] = [];
+      const allIds: string[] = [];
+      for (const g of groups) {
+        const { next, logs, updatedIds } = batchUpdateDoors(
+          merged,
+          g,
+          category,
+          { width, type },
+          polys,
+        );
+        merged = next;
+        allLogs.push(...logs);
+        allIds.push(...updatedIds);
+      }
+      setInteriors(merged);
+      setHighlightedUnitIds(allIds);
+      setAgentLog((logs) => [...allLogs, ...logs].slice(0, 12));
+      setOverlays((o) => ({ ...o, interiors: true }));
+      window.setTimeout(() => setHighlightedUnitIds([]), 2200);
+    },
+    [plan, interiors],
+  );
+
+  const population = useMemo(
+    () => (plan ? populationFromUnits(plan.units) : []),
+    [plan],
+  );
+
+  const selectedInterior = selectedId ? interiors[selectedId] : null;
 
   /** 결과 패널의 세대수 ± — 목표를 바꾸고 곧바로 그 값으로 다시 생성한다. */
   const setUnitCountTarget = useCallback(
@@ -458,6 +655,16 @@ export default function EditorPage() {
           busy={busy}
           onGenerate={() => run(false)}
           onExplore={() => run(true)}
+          hasPlan={!!plan}
+          templates={listTemplates()}
+          interiorsCount={Object.keys(interiors).length}
+          selectedUnitCount={selectedUnitIds.length}
+          selectedInterior={selectedInterior}
+          agentLog={agentLog}
+          onApplyTemplate={applyLibraryTemplate}
+          onAutoFitInteriors={applyAutoInteriors}
+          onClearInteriors={clearInteriors}
+          onBatchDoors={batchDoorUpdate}
         />
 
         <FloorCanvas
@@ -484,7 +691,11 @@ export default function EditorPage() {
           onUnderlay={setUnderlay}
           overlays={overlays}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={handleSelectUnit}
+          selectedUnitIds={selectedUnitIds}
+          onWallMove={(edits) => void handleWallMove(edits)}
+          interiors={interiors}
+          highlightedUnitIds={highlightedUnitIds}
         />
 
         <MetricsPanel
@@ -495,10 +706,14 @@ export default function EditorPage() {
           onPickOption={(i) => {
             setActiveIndex(i);
             setPlan(options[i]);
+            setInteriors({});
           }}
           unitCountTarget={params.unit_count_target}
           onUnitCountTarget={setUnitCountTarget}
           busy={busy}
+          interiors={interiors}
+          selectedId={selectedId}
+          population={population}
         />
       </main>
     </div>
