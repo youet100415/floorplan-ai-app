@@ -56,7 +56,7 @@ interface Props {
   /** 공간 센터·문 연결 그래프 표시 */
   showSpaceGraph?: boolean;
   /** Reference floorplan image shown behind the unit drawing. */
-  underlay?: { src: string; opacity: number; visible: boolean } | null;
+  underlay?: { src: string; origin: [number, number]; widthM: number; heightM: number | null; opacity: number; visible: boolean } | null;
 }
 
 export default function PlanDocCanvas({
@@ -532,11 +532,9 @@ export default function PlanDocCanvas({
         <rect width="100%" height="100%" fill="var(--plan-bg)" />
         {settings.showGrid && <rect width="100%" height="100%" fill="url(#rayon-grid)" />}
         {underlay?.visible && underlay.src && (() => {
-          const boundary = doc.siteBoundary ?? [{ x: 0, y: 0 }, { x: 8.4, y: 7.2 }];
-          const xs = boundary.map((p) => p.x);
-          const ys = boundary.map((p) => p.y);
-          const a = S({ x: Math.min(...xs), y: Math.min(...ys) });
-          const b = S({ x: Math.max(...xs), y: Math.max(...ys) });
+          const height = underlay.heightM ?? (doc.siteBoundary ? Math.max(...doc.siteBoundary.map((p) => p.y)) - Math.min(...doc.siteBoundary.map((p) => p.y)) : 7.2);
+          const a = S({ x: underlay.origin[0], y: underlay.origin[1] });
+          const b = S({ x: underlay.origin[0] + underlay.widthM, y: underlay.origin[1] + height });
           return <image href={underlay.src} x={Math.min(a.x, b.x)} y={Math.min(a.y, b.y)} width={Math.max(1, Math.abs(b.x - a.x))} height={Math.max(1, Math.abs(b.y - a.y))} opacity={underlay.opacity} preserveAspectRatio="none" pointerEvents="none" />;
         })()}
 

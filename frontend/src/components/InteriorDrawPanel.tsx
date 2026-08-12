@@ -2,7 +2,7 @@
 
 /** 내부 평면 그리기 전용 패널 — 만들고 라이브러리에 저장. */
 
-import type { UnitTemplate } from "@/utils/types";
+import type { Underlay, UnitTemplate } from "@/utils/types";
 import type { OpeningKind, ToolId } from "@/lib/plan";
 
 interface Props {
@@ -28,7 +28,8 @@ interface Props {
   onPickTemplateToEdit?: (id: string) => void;
   onGoApply: () => void;
   canGoApply: boolean;
-  underlay: { src: string; opacity: number; visible: boolean } | null;
+  underlay: Underlay | null;
+  onUnderlay: (underlay: Underlay | null) => void;
   onLoadUnderlay: (file: File) => void;
   onClearUnderlay: () => void;
 }
@@ -56,6 +57,7 @@ export default function InteriorDrawPanel({
   onGoApply,
   canGoApply,
   underlay,
+  onUnderlay,
   onLoadUnderlay,
   onClearUnderlay,
 }: Props) {
@@ -89,9 +91,15 @@ export default function InteriorDrawPanel({
             />
           </label>
           {underlay && (
+            <div className="toolOptions">
+              <label className="ctl"><span className="ctlHead">도면 가로 실제 길이 <output>{underlay.widthM.toFixed(2)} m</output></span><input type="range" min={1} max={50} step={0.1} value={underlay.widthM} onChange={(e) => onUnderlay({ ...underlay, widthM: Number(e.target.value) })} /></label>
+              <label className="ctl"><span className="ctlHead">도면 세로 실제 길이 <output>{(underlay.heightM ?? canvasD).toFixed(2)} m</output></span><input type="range" min={1} max={50} step={0.1} value={underlay.heightM ?? canvasD} onChange={(e) => onUnderlay({ ...underlay, heightM: Number(e.target.value) })} /></label>
+              <label className="ctl"><span className="ctlHead">도면 투명도 <output>{Math.round(underlay.opacity * 100)}%</output></span><input type="range" min={0.1} max={1} step={0.05} value={underlay.opacity} onChange={(e) => onUnderlay({ ...underlay, opacity: Number(e.target.value) })} /></label>
+              <p className="note">도면의 실제 치수(예: 외벽 8.4m)를 가로 또는 세로 길이에 맞추면 그 스케일로 작도합니다.</p>
             <button type="button" className="ghost danger" style={{ marginTop: 8 }} onClick={onClearUnderlay}>
               배경 도면 제거
             </button>
+            </div>
           )}
         </section>
 

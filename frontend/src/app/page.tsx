@@ -1219,6 +1219,7 @@ export default function EditorPage() {
             onGoApply={enterStageApply}
             canGoApply={!!plan}
             underlay={underlay}
+            onUnderlay={setUnderlay}
             onLoadUnderlay={loadUnderlay}
             onClearUnderlay={() => setUnderlay(null)}
           />
