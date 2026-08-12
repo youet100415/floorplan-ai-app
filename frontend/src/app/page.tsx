@@ -72,6 +72,7 @@ import type {
   UnitTemplate,
   VertexRole,
 } from "@/utils/types";
+import type { Wall } from "@/lib/plan";
 
 const DEFAULT_PARAMS: GenerateParams = {
   boundary: asCorners([
@@ -552,6 +553,83 @@ export default function EditorPage() {
   }, [plan, agentMessages.length]);
 
   const enterStage2 = enterStageApply;
+
+  const autoTraceWallsFromUnderlay = useCallback(() => {
+    if (!underlay?.src) {
+      setUnderlayNotice("먼저 도면 이미지를 선택해 주세요.");
+      return;
+    }
+    const image = new Image();
+    image.onload = () => {
+      const maxSide = 900;
+      const ratio = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+      const width = Math.max(1, Math.round(image.naturalWidth * ratio));
+      const height = Math.max(1, Math.round(image.naturalHeight * ratio));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return;
+      context.drawImage(image, 0, 0, width, height);
+      const pixels = context.getImageData(0, 0, width, height).data;
+      const dark = (x: number, y: number) => {
+        const i = (y * width + x) * 4;
+        return (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3 < 150 && pixels[i + 3] > 40;
+      };
+      const horizontal: Wall[] = [];
+      const vertical: Wall[] = [];
+      const thickness = 0.2;
+      const imageHeightM = underlay.heightM ?? underlay.widthM * (height / width);
+      const toPoint = (x: number, y: number) => ({
+        x: underlay.origin[0] + (x / width) * underlay.widthM,
+        y: underlay.origin[1] + (y / height) * imageHeightM,
+      });
+      const addRuns = (axis: "h" | "v") => {
+        const limit = axis === "h" ? height : width;
+        const span = axis === "h" ? width : height;
+        const candidates: { index: number; start: number; end: number }[] = [];
+        for (let i = 0; i < limit; i += 1) {
+          let start = -1;
+          let end = -1;
+          for (let j = 0; j < span; j += 1) {
+            const isDark = axis === "h" ? dark(j, i) : dark(i, j);
+            if (isDark && start < 0) start = j;
+            if (!isDark && start >= 0) { end = j - 1; break; }
+          }
+          if (start >= 0 && end < 0) end = span - 1;
+          if (start >= 0 && end - start >= span * 0.2) candidates.push({ index: i, start, end });
+        }
+        let cluster: typeof candidates = [];
+        const flush = () => {
+          if (!cluster.length) return;
+          const middle = cluster[Math.floor(cluster.length / 2)];
+          const first = Math.min(...cluster.map((v) => v.start));
+          const last = Math.max(...cluster.map((v) => v.end));
+          const a = axis === "h" ? toPoint(first, middle.index) : toPoint(middle.index, first);
+          const b = axis === "h" ? toPoint(last, middle.index) : toPoint(middle.index, last);
+          const wall: Wall = { id: `auto-wall-${Date.now()}-${axis}-${middle.index}`, a, b, thickness, align: "center", storyId: "story-1" };
+          (axis === "h" ? horizontal : vertical).push(wall);
+          cluster = [];
+        };
+        candidates.forEach((candidate, index) => {
+          if (!cluster.length || candidate.index - candidates[index - 1].index <= 3) cluster.push(candidate);
+          else { flush(); cluster.push(candidate); }
+        });
+        flush();
+      };
+      addRuns("h");
+      addRuns("v");
+      const walls = [...horizontal, ...vertical];
+      if (!walls.length) {
+        setUnderlayNotice("뚜렷한 벽 선을 찾지 못했습니다. 대비가 높은 이미지로 다시 시도해 주세요.");
+        return;
+      }
+      setAuthorDoc((current) => ({ ...current, walls, openings: [], name: current.name }));
+      setUnderlayNotice(`벽체 ${walls.length}개를 추출했습니다. 두께 200mm 기준이며 검토 후 수정해 주세요.`);
+    };
+    image.onerror = () => setUnderlayNotice("도면 이미지를 분석하지 못했습니다.");
+    image.src = underlay.src;
+  }, [underlay]);
 
   const saveAuthorToLibrary = useCallback(() => {
     const name = authorSaveName.trim() || `유닛 모듈 ${new Date().toLocaleString("ko-KR")}`;
@@ -1267,6 +1345,7 @@ export default function EditorPage() {
             underlayNotice={underlayNotice}
             onLoadUnderlay={loadUnderlay}
             onClearUnderlay={() => setUnderlay(null)}
+            onAutoTraceWalls={autoTraceWallsFromUnderlay}
           />
         )}
 

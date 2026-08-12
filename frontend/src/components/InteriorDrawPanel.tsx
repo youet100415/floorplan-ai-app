@@ -33,6 +33,7 @@ interface Props {
   onUnderlay: (underlay: Underlay | null) => void;
   onLoadUnderlay: (file: File) => void;
   onClearUnderlay: () => void;
+  onAutoTraceWalls?: () => void;
   underlayAction: "move" | "calibrate" | null;
   onUnderlayAction: (action: "move" | "calibrate" | null) => void;
   calibrationMm: number;
@@ -68,6 +69,7 @@ export default function InteriorDrawPanel({
   onUnderlay,
   onLoadUnderlay,
   onClearUnderlay,
+  onAutoTraceWalls,
   underlayAction,
   onUnderlayAction,
   calibrationMm,
@@ -114,6 +116,8 @@ export default function InteriorDrawPanel({
           </label>
           {underlay && (
             <div className="toolOptions">
+            <button type="button" className="primary" onClick={onAutoTraceWalls} disabled={!onAutoTraceWalls}>200mm 기준으로 벽체 자동 만들기</button>
+            <p className="note">검은 선이 뚜렷한 평면도에서 벽체 후보를 추출합니다. 생성 후 벽·문 위치를 확인해 주세요.</p>
               <label className="ctl"><span className="ctlHead">도면 가로 실제 길이 <output>{Math.round(underlay.widthM * 1000)} mm</output></span><input type="range" min={1000} max={50000} step={100} value={Math.round(underlay.widthM * 1000)} onChange={(e) => { const widthM = Number(e.target.value) / 1000; onUnderlay({ ...underlay, widthM, heightM: underlay.lockAspectRatio !== false && underlay.aspectRatio ? widthM / underlay.aspectRatio : underlay.heightM }); }} /></label>
               <label className="ctl"><span className="ctlHead">도면 세로 실제 길이 <output>{Math.round((underlay.heightM ?? canvasD) * 1000)} mm</output></span><input type="range" min={1000} max={50000} step={100} value={Math.round((underlay.heightM ?? canvasD) * 1000)} onChange={(e) => { const heightM = Number(e.target.value) / 1000; onUnderlay({ ...underlay, heightM, widthM: underlay.lockAspectRatio !== false && underlay.aspectRatio ? heightM * underlay.aspectRatio : underlay.widthM }); }} /></label>
               <label className="checkRow"><input type="checkbox" checked={underlay.lockAspectRatio !== false} onChange={(e) => onUnderlay({ ...underlay, lockAspectRatio: e.target.checked })} /> 원본 이미지 가로·세로 비율 묶기</label>
