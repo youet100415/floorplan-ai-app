@@ -705,7 +705,7 @@ button.stage2Cta {
   flex: 1 1 auto; min-height: 0;
 }
 
-.unitEditorLayout { grid-template-columns: 72px 316px minmax(0, 1fr) 340px; }
+.unitEditorLayout { grid-template-columns: 92px 316px minmax(0, 1fr) 340px; }
 .editorRail {
   display: flex;
   flex-direction: column;
@@ -717,7 +717,7 @@ button.stage2Cta {
   min-height: 0;
 }
 .editorRailItem {
-  width: 60px;
+  width: 76px;
   min-height: 62px;
   display: flex;
   flex-direction: column;
@@ -741,7 +741,7 @@ button.stage2Cta {
 
 @media (max-width: 1200px) {
   .layout { grid-template-columns: 280px minmax(0, 1fr); }
-  .unitEditorLayout { grid-template-columns: 64px 280px minmax(0, 1fr); }
+  .unitEditorLayout { grid-template-columns: 84px 280px minmax(0, 1fr); }
   .metrics { display: none; }
 }
 
