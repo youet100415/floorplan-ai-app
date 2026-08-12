@@ -529,29 +529,6 @@ export default function PlanDocCanvas({
             />
           </pattern>
         </defs>
-        {underlay?.visible && underlay.src && (() => {
-          const boundary = doc.siteBoundary ?? [{ x: 0, y: 0 }, { x: 8.4, y: 7.2 }];
-          const xs = boundary.map((p) => p.x);
-          const ys = boundary.map((p) => p.y);
-          const minX = Math.min(...xs);
-          const minY = Math.min(...ys);
-          const maxX = Math.max(...xs);
-          const maxY = Math.max(...ys);
-          const a = S({ x: minX, y: minY });
-          const b = S({ x: maxX, y: maxY });
-          return (
-            <image
-              href={underlay.src}
-              x={a.x}
-              y={a.y}
-              width={Math.max(1, b.x - a.x)}
-              height={Math.max(1, b.y - a.y)}
-              opacity={underlay.opacity}
-              preserveAspectRatio="none"
-              pointerEvents="none"
-            />
-          );
-        })()}
         <rect width="100%" height="100%" fill="var(--plan-bg)" />
         {settings.showGrid && <rect width="100%" height="100%" fill="url(#rayon-grid)" />}
         {underlay?.visible && underlay.src && (() => {
@@ -560,7 +537,7 @@ export default function PlanDocCanvas({
           const ys = boundary.map((p) => p.y);
           const a = S({ x: Math.min(...xs), y: Math.min(...ys) });
           const b = S({ x: Math.max(...xs), y: Math.max(...ys) });
-          return <image href={underlay.src} x={a.x} y={a.y} width={Math.max(1, b.x - a.x)} height={Math.max(1, b.y - a.y)} opacity={underlay.opacity} preserveAspectRatio="none" pointerEvents="none" />;
+          return <image href={underlay.src} x={Math.min(a.x, b.x)} y={Math.min(a.y, b.y)} width={Math.max(1, Math.abs(b.x - a.x))} height={Math.max(1, Math.abs(b.y - a.y))} opacity={underlay.opacity} preserveAspectRatio="none" pointerEvents="none" />;
         })()}
 
         {/* zones */}
