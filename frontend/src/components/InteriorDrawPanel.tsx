@@ -116,8 +116,8 @@ export default function InteriorDrawPanel({
           </label>
           {underlay && (
             <div className="toolOptions">
-            <button type="button" className="primary" onClick={onAutoTraceWalls} disabled={!onAutoTraceWalls}>200mm 기준으로 벽체 자동 만들기</button>
-            <p className="note">검은 선이 뚜렷한 평면도에서 벽체 후보를 추출합니다. 생성 후 벽·문 위치를 확인해 주세요.</p>
+            <button type="button" className="primary" onClick={onAutoTraceWalls} disabled={!onAutoTraceWalls}>1단계 · 전체 벽체를 200mm로 만들기</button>
+            <p className="note">먼저 도면 전체의 벽체를 생성합니다. 벽체를 확인한 다음 2단계에서 창문과 도어를 배치하세요.</p>
               <label className="ctl"><span className="ctlHead">도면 가로 실제 길이 <output>{Math.round(underlay.widthM * 1000)} mm</output></span><input type="range" min={1000} max={50000} step={100} value={Math.round(underlay.widthM * 1000)} onChange={(e) => { const widthM = Number(e.target.value) / 1000; onUnderlay({ ...underlay, widthM, heightM: underlay.lockAspectRatio !== false && underlay.aspectRatio ? widthM / underlay.aspectRatio : underlay.heightM }); }} /></label>
               <label className="ctl"><span className="ctlHead">도면 세로 실제 길이 <output>{Math.round((underlay.heightM ?? canvasD) * 1000)} mm</output></span><input type="range" min={1000} max={50000} step={100} value={Math.round((underlay.heightM ?? canvasD) * 1000)} onChange={(e) => { const heightM = Number(e.target.value) / 1000; onUnderlay({ ...underlay, heightM, widthM: underlay.lockAspectRatio !== false && underlay.aspectRatio ? heightM * underlay.aspectRatio : underlay.widthM }); }} /></label>
               <label className="checkRow"><input type="checkbox" checked={underlay.lockAspectRatio !== false} onChange={(e) => onUnderlay({ ...underlay, lockAspectRatio: e.target.checked })} /> 원본 이미지 가로·세로 비율 묶기</label>
@@ -189,6 +189,8 @@ export default function InteriorDrawPanel({
                 key={id}
                 type="button"
                 className={`toolBtn${tool === id ? " on" : ""}`}
+                disabled={id === "door" && wallCount === 0}
+                title={id === "door" && wallCount === 0 ? "먼저 전체 벽체를 생성하세요" : undefined}
                 onClick={() => onTool(id)}
               >
                 {label}
@@ -207,6 +209,8 @@ export default function InteriorDrawPanel({
                 key={k}
                 type="button"
                 className={openingKind === k ? "on" : ""}
+                disabled={wallCount === 0}
+                title={wallCount === 0 ? "먼저 전체 벽체를 생성하세요" : undefined}
                 onClick={() => {
                   onOpeningKind(k);
                   onTool("door");
@@ -218,6 +222,7 @@ export default function InteriorDrawPanel({
           </div>
           <p className="note">
             현재: 벽 {wallCount} · 실 {zoneCount} · 개구 {openingCount}
+            {wallCount === 0 ? " · 1단계 벽체 생성 필요" : " · 2단계 창문·도어 배치 가능"}
           </p>
         </section>
 
