@@ -242,8 +242,8 @@ button, input, select { font: inherit; color: inherit; }
 .stageBanner.stageDraw {
   background: linear-gradient(
     135deg,
-    color-mix(in srgb, #0ca30c 12%, var(--surface)),
-    color-mix(in srgb, var(--accent) 10%, var(--surface))
+    color-mix(in srgb, var(--accent) 12%, var(--surface)),
+    color-mix(in srgb, #9c66d7 10%, var(--surface))
   );
 }
 .tplCard.static {
@@ -799,8 +799,20 @@ button.stage2Cta {
 .unitSettingsStats b { display: block; color: var(--ink); font-size: 16px; }
 .panelCollapseButton { width: calc(100% - 24px); margin: 8px 12px; padding: 6px 10px; border: 1px solid var(--border); background: var(--plane); font-size: 11px; }
 .editorGroupNav { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
-.editorGroupNav button { display: flex; justify-content: space-between; padding: 8px 10px; border: 1px solid var(--border); background: var(--plane); font-size: 11px; text-align: left; }
+.interiorPanel { font-size: 12px; color: var(--ink); }
+.interiorPanel .stageBanner { padding: 14px 16px; }
+.interiorPanel .stageBanner strong { font-size: 14px; letter-spacing: -0.02em; }
+.interiorPanel .stageBanner p { font-size: 11px; line-height: 1.55; }
+.interiorPanel section { padding: 16px; }
+.interiorPanel h2 { margin-bottom: 12px; font-size: 11px; letter-spacing: 0.04em; }
+.editorGroupNav button { display: flex; justify-content: space-between; padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--muted); font-size: 11px; text-align: left; }
 .editorGroupNav button.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.interiorPanel button { min-height: 34px; border-radius: 7px; }
+.interiorPanel .toolBtn { background: var(--surface); border: 1px solid var(--border); color: var(--ink); }
+.interiorPanel .toolBtn:hover { border-color: var(--accent); }
+.interiorPanel .toolBtn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.interiorPanel .ghost { background: var(--surface); }
+.interiorPanel .ctl input[type="number"], .interiorPanel .ctl input[type="text"] { border-radius: 6px; border-color: var(--border); }
 .editorGroupSection.group-closed { display: none; }
 .ctxTitle { display: block; padding: 8px 10px; font-size: 12px; }
 .ctxField { display: block; padding: 7px 10px; font-size: 11px; color: var(--muted); }
