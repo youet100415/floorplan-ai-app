@@ -125,6 +125,7 @@ export default function EditorPage() {
   const [underlay, setUnderlay] = useState<Underlay | null>(null);
   const [underlayAction, setUnderlayAction] = useState<"move" | "calibrate" | null>(null);
   const [calibrationMm, setCalibrationMm] = useState(1000);
+  const [underlayNotice, setUnderlayNotice] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
   /** 크기 편집 대상 코어. 도면에서 사각 핸들을 클릭하면 지정된다. */
@@ -1238,7 +1239,9 @@ export default function EditorPage() {
             onUnderlayAction={setUnderlayAction}
             calibrationMm={calibrationMm}
             onCalibrationMm={setCalibrationMm}
-            onSaveSample={() => localStorage.setItem("floorplan-ai-unit-underlay-sample", JSON.stringify({ underlay, authorDoc, authorW, authorD }))}
+            onSaveSample={() => { localStorage.setItem("floorplan-ai-unit-underlay-sample", JSON.stringify({ underlay, authorDoc, authorW, authorD })); setUnderlayNotice("현재 도면 샘플을 저장했습니다."); }}
+            onLoadSample={() => { const raw = localStorage.getItem("floorplan-ai-unit-underlay-sample"); if (!raw) { setUnderlayNotice("저장된 샘플이 없습니다."); return; } try { const sample = JSON.parse(raw); if (sample.underlay) setUnderlay(sample.underlay); if (sample.authorDoc) setAuthorDoc(sample.authorDoc); if (sample.authorW) setAuthorW(sample.authorW); if (sample.authorD) setAuthorD(sample.authorD); setUnderlayNotice("저장된 도면 샘플을 불러왔습니다."); } catch { setUnderlayNotice("샘플을 불러오지 못했습니다."); } }}
+            underlayNotice={underlayNotice}
             onLoadUnderlay={loadUnderlay}
             onClearUnderlay={() => setUnderlay(null)}
           />
