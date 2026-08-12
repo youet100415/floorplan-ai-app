@@ -96,7 +96,7 @@ export default function InteriorDrawPanel({
       <button type="button" className="panelCollapseButton" onClick={() => setPanelOpen((value) => !value)} aria-expanded={panelOpen}>{panelOpen ? "패널 접기" : "패널 열기"}</button>
       {panelOpen && <div className="panelBody">
         <nav className="editorGroupNav" aria-label="도구 그룹">
-          {[['special','특수 기능'],['rooms','방 만들기'],['structure','구조물 그리기'],['general','일반']].map(([id,label]) => <button key={id} type="button" className={openGroups[id] ? "on" : ""} onClick={() => toggleGroup(id)}>{label}<span>{openGroups[id] ? "⌃" : "⌄"}</span></button>)}
+          {[['special','특수 기능'],['rooms','방 만들기'],['structure','구조물 그리기'],['general','일반']].map(([id,label]) => <button key={id} type="button" className={openGroups[id] ? "on" : ""} aria-expanded={openGroups[id]} onClick={() => toggleGroup(id)}><strong>{label}</strong><span aria-hidden>{openGroups[id] ? "⌃" : "⌄"}</span></button>)}
         </nav>
         <section className={`editorGroupSection group-${openGroups.special ? "open" : "closed"}`}>
           <h2>기존 도면 깔기</h2>

@@ -797,16 +797,18 @@ button.stage2Cta {
 .unitSettingsStats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 11px; color: var(--muted); }
 .unitSettingsStats span { border: 1px solid var(--border); border-radius: 6px; padding: 8px 5px; text-align: center; }
 .unitSettingsStats b { display: block; color: var(--ink); font-size: 16px; }
-.panelCollapseButton { width: calc(100% - 24px); margin: 8px 12px; padding: 6px 10px; border: 1px solid var(--border); background: var(--plane); font-size: 11px; }
-.editorGroupNav { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.panelCollapseButton { width: calc(100% - 28px); margin: 10px 14px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.editorGroupNav { display: flex; flex-direction: column; padding: 0; border-bottom: 1px solid var(--border); }
 .interiorPanel { font-size: 12px; color: var(--ink); }
 .interiorPanel .stageBanner { padding: 14px 16px; }
 .interiorPanel .stageBanner strong { font-size: 14px; letter-spacing: -0.02em; }
 .interiorPanel .stageBanner p { font-size: 11px; line-height: 1.55; }
 .interiorPanel section { padding: 16px; }
 .interiorPanel h2 { margin-bottom: 12px; font-size: 11px; letter-spacing: 0.04em; }
-.editorGroupNav button { display: flex; justify-content: space-between; padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--muted); font-size: 11px; text-align: left; }
-.editorGroupNav button.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.editorGroupNav button { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 52px; padding: 0 16px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: var(--surface); color: var(--ink); font-size: 13px; text-align: left; }
+.editorGroupNav button strong { font-weight: 600; }
+.editorGroupNav button span { color: var(--muted); font-size: 14px; }
+.editorGroupNav button.on { border-color: var(--border); color: var(--ink); background: var(--surface); }
 .interiorPanel button { min-height: 34px; border-radius: 7px; }
 .interiorPanel .toolBtn { background: var(--surface); border: 1px solid var(--border); color: var(--ink); }
 .interiorPanel .toolBtn:hover { border-color: var(--accent); }
