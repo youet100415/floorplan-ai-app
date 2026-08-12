@@ -1218,6 +1218,9 @@ export default function EditorPage() {
             onDeleteTemplate={(id) => setUserTemplates(deleteUserTemplate(id))}
             onGoApply={enterStageApply}
             canGoApply={!!plan}
+            underlay={underlay}
+            onLoadUnderlay={loadUnderlay}
+            onClearUnderlay={() => setUnderlay(null)}
           />
         )}
 
@@ -1277,6 +1280,7 @@ export default function EditorPage() {
               onChange={setAuthorDoc}
               tool={planTool}
               openingKind={planOpeningKind}
+              underlay={underlay}
             />
           </div>
         ) : stage === 3 && selectedUnit && selectedPlanDoc ? (

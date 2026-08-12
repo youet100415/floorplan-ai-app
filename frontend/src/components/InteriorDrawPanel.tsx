@@ -28,6 +28,9 @@ interface Props {
   onPickTemplateToEdit?: (id: string) => void;
   onGoApply: () => void;
   canGoApply: boolean;
+  underlay: { src: string; opacity: number; visible: boolean } | null;
+  onLoadUnderlay: (file: File) => void;
+  onClearUnderlay: () => void;
 }
 
 export default function InteriorDrawPanel({
@@ -52,6 +55,9 @@ export default function InteriorDrawPanel({
   onDeleteTemplate,
   onGoApply,
   canGoApply,
+  underlay,
+  onLoadUnderlay,
+  onClearUnderlay,
 }: Props) {
   return (
     <aside className="sidebar panel interiorPanel">
@@ -66,6 +72,29 @@ export default function InteriorDrawPanel({
       </div>
 
       <div className="panelBody">
+        <section>
+          <h2>기존 도면 깔기</h2>
+          <p className="note">기존 평면도 이미지를 배경에 놓고 벽·공간을 따라 그립니다.</p>
+          <label className="ghost" style={{ display: "block", textAlign: "center", cursor: "pointer" }}>
+            도면 이미지 선택
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onLoadUnderlay(file);
+                e.currentTarget.value = "";
+              }}
+            />
+          </label>
+          {underlay && (
+            <button type="button" className="ghost danger" style={{ marginTop: 8 }} onClick={onClearUnderlay}>
+              배경 도면 제거
+            </button>
+          )}
+        </section>
+
         <section>
           <h2>작도 캔버스 크기</h2>
           <label className="ctl">

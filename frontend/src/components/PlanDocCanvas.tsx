@@ -55,6 +55,8 @@ interface Props {
   readOnly?: boolean;
   /** 공간 센터·문 연결 그래프 표시 */
   showSpaceGraph?: boolean;
+  /** Reference floorplan image shown behind the unit drawing. */
+  underlay?: { src: string; opacity: number; visible: boolean } | null;
 }
 
 export default function PlanDocCanvas({
@@ -65,6 +67,7 @@ export default function PlanDocCanvas({
   className,
   readOnly = false,
   showSpaceGraph = true,
+  underlay = null,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const settings = defaultSettings();
@@ -526,6 +529,29 @@ export default function PlanDocCanvas({
             />
           </pattern>
         </defs>
+        {underlay?.visible && underlay.src && (() => {
+          const boundary = doc.siteBoundary ?? [{ x: 0, y: 0 }, { x: 8.4, y: 7.2 }];
+          const xs = boundary.map((p) => p.x);
+          const ys = boundary.map((p) => p.y);
+          const minX = Math.min(...xs);
+          const minY = Math.min(...ys);
+          const maxX = Math.max(...xs);
+          const maxY = Math.max(...ys);
+          const a = S({ x: minX, y: minY });
+          const b = S({ x: maxX, y: maxY });
+          return (
+            <image
+              href={underlay.src}
+              x={a.x}
+              y={a.y}
+              width={Math.max(1, b.x - a.x)}
+              height={Math.max(1, b.y - a.y)}
+              opacity={underlay.opacity}
+              preserveAspectRatio="none"
+              pointerEvents="none"
+            />
+          );
+        })()}
         <rect width="100%" height="100%" fill="var(--plan-bg)" />
         {settings.showGrid && <rect width="100%" height="100%" fill="url(#rayon-grid)" />}
 
