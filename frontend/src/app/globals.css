@@ -718,6 +718,10 @@ button.stage2Cta {
   border-right: 0;
   border-left: 1px solid var(--border);
 }
+.unitEditorLayout.editorPanelClosed { grid-template-columns: 92px 0 minmax(0, 1fr) 340px; }
+.unitEditorLayout.editorPanelClosed .interiorPanel { display: none; }
+.unitEditorLayout.editorDockLeft.editorPanelClosed { grid-template-columns: 92px 340px minmax(0, 1fr) 0; }
+.unitEditorLayout.editorDockLeft.editorPanelClosed .unitSettings { grid-column: 2; }
 .editorRail {
   display: flex;
   flex-direction: column;

@@ -182,6 +182,7 @@ export default function EditorPage() {
   const [authorTypeHint, setAuthorTypeHint] = useState("2BR");
   const [authorGen, setAuthorGen] = useState(0);
   const [unitEditorDockLeft, setUnitEditorDockLeft] = useState(false);
+  const [unitEditorPanelOpen, setUnitEditorPanelOpen] = useState(true);
 
   const agentId = () => `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -1236,14 +1237,14 @@ export default function EditorPage() {
         </div>
       )}
 
-      <main className={`layout${stage !== 1 ? " layoutStage2" : ""}${stage === 2 ? " unitEditorLayout" : ""}${stage === 2 && unitEditorDockLeft ? " editorDockLeft" : ""}`}>
+      <main className={`layout${stage !== 1 ? " layoutStage2" : ""}${stage === 2 ? " unitEditorLayout" : ""}${stage === 2 && unitEditorDockLeft ? " editorDockLeft" : ""}${stage === 2 && !unitEditorPanelOpen ? " editorPanelClosed" : ""}`}>
         {stage === 2 && (
           <nav className="editorRail" aria-label="도면 작업 메뉴">
             <button type="button" className="editorRailItem" aria-label="템플릿">
               <span>▤</span><em>템플릿</em>
             </button>
-            <button type="button" className="editorRailItem active" aria-current="page" aria-pressed={unitEditorDockLeft} aria-label="도면 그리기" onClick={() => setUnitEditorDockLeft((value) => !value)}>
-              <span>▦</span><em>도면 그리기</em>
+            <button type="button" className={`editorRailItem${unitEditorPanelOpen ? " active" : ""}`} aria-current={unitEditorPanelOpen ? "page" : undefined} aria-pressed={unitEditorPanelOpen} aria-label="도면 그리기" onClick={() => setUnitEditorPanelOpen((value) => !value)}>
+              <span>▦</span><em>도면 그리기<br />{unitEditorPanelOpen ? "닫기" : "열기"}</em>
             </button>
             <button type="button" className="editorRailItem" aria-label="제품">
               <span>◇</span><em>제품</em>
