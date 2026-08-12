@@ -183,6 +183,7 @@ export default function EditorPage() {
   const [authorGen, setAuthorGen] = useState(0);
   const [unitEditorDockLeft, setUnitEditorDockLeft] = useState(false);
   const [unitEditorPanelOpen, setUnitEditorPanelOpen] = useState(true);
+  const [unitSettingsOpen, setUnitSettingsOpen] = useState(true);
 
   const agentId = () => `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -1505,6 +1506,8 @@ export default function EditorPage() {
             onCanvasW={setAuthorW}
             onCanvasD={setAuthorD}
             onUnderlay={setUnderlay}
+            open={unitSettingsOpen}
+            onToggleOpen={() => setUnitSettingsOpen((value) => !value)}
           />
         ) : <MetricsPanel
           plan={plan}

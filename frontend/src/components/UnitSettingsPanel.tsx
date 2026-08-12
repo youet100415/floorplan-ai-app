@@ -13,6 +13,8 @@ type Props = {
   onCanvasW: (value: number) => void;
   onCanvasD: (value: number) => void;
   onUnderlay: (value: Underlay | null) => void;
+  open: boolean;
+  onToggleOpen: () => void;
 };
 
 function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
@@ -27,9 +29,11 @@ function Section({ title, children, defaultOpen = false }: { title: string; chil
   );
 }
 
-export default function UnitSettingsPanel({ canvasW, canvasD, wallCount, zoneCount, openingCount, underlay, onCanvasW, onCanvasD, onUnderlay }: Props) {
+export default function UnitSettingsPanel({ canvasW, canvasD, wallCount, zoneCount, openingCount, underlay, onCanvasW, onCanvasD, onUnderlay, open, onToggleOpen }: Props) {
   return (
-    <aside className="unitSettings panel" aria-label="유닛 수치 및 설정">
+    <aside className={`unitSettings panel${open ? "" : " isClosed"}`} aria-label="유닛 수치 및 설정">
+      <button type="button" className="unitSettingsReopen" onClick={onToggleOpen} aria-label={open ? "수치 및 검토 닫기" : "수치 및 검토 열기"}>{open ? "닫기" : "수치·검토 열기"}</button>
+      {open && <>
       <div className="unitSettingsTabs"><button type="button" className="unitSettingsTab on">수치</button><button type="button" className="unitSettingsTab">검토</button></div>
       <div className="unitSettingsScroll">
         <div className="unitSettingsTitle"><strong>유닛 설정</strong><span>mm / m</span></div>
@@ -50,6 +54,7 @@ export default function UnitSettingsPanel({ canvasW, canvasD, wallCount, zoneCou
         </Section>
         <Section title="빠른 작업"><p className="note">캔버스에서 우클릭하면 선택 요소의 수치와 빠른 작업을 엽니다.</p></Section>
       </div>
+      </>}
     </aside>
   );
 }
