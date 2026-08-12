@@ -743,6 +743,11 @@ button.stage2Cta {
 .unitSettingsStats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 11px; color: var(--muted); }
 .unitSettingsStats span { border: 1px solid var(--border); border-radius: 6px; padding: 8px 5px; text-align: center; }
 .unitSettingsStats b { display: block; color: var(--ink); font-size: 16px; }
+.panelCollapseButton { width: calc(100% - 24px); margin: 8px 12px; padding: 6px 10px; border: 1px solid var(--border); background: var(--plane); font-size: 11px; }
+.editorGroupNav { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.editorGroupNav button { display: flex; justify-content: space-between; padding: 8px 10px; border: 1px solid var(--border); background: var(--plane); font-size: 11px; text-align: left; }
+.editorGroupNav button.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.editorGroupSection.group-closed { display: none; }
 .ctxTitle { display: block; padding: 8px 10px; font-size: 12px; }
 .ctxField { display: block; padding: 7px 10px; font-size: 11px; color: var(--muted); }
 .ctxField input { width: 100%; margin-top: 4px; padding: 5px 6px; }

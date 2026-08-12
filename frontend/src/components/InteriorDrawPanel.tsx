@@ -2,6 +2,7 @@
 
 /** 내부 평면 그리기 전용 패널 — 만들고 라이브러리에 저장. */
 
+import { useState } from "react";
 import type { Underlay, UnitTemplate } from "@/utils/types";
 import type { OpeningKind, ToolId } from "@/lib/plan";
 
@@ -75,6 +76,9 @@ export default function InteriorDrawPanel({
   onLoadSample,
   underlayNotice,
 }: Props) {
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ special: true, rooms: true, structure: true, general: true });
+  const toggleGroup = (id: string) => setOpenGroups((current) => ({ ...current, [id]: !current[id] }));
   return (
     <aside className="sidebar panel interiorPanel">
       <div className="stageBanner stageDraw">
@@ -87,8 +91,12 @@ export default function InteriorDrawPanel({
         </div>
       </div>
 
-      <div className="panelBody">
-        <section>
+      <button type="button" className="panelCollapseButton" onClick={() => setPanelOpen((value) => !value)} aria-expanded={panelOpen}>{panelOpen ? "패널 접기" : "패널 열기"}</button>
+      {panelOpen && <div className="panelBody">
+        <nav className="editorGroupNav" aria-label="도구 그룹">
+          {[['special','특수 기능'],['rooms','방 만들기'],['structure','구조물 그리기'],['general','일반']].map(([id,label]) => <button key={id} type="button" className={openGroups[id] ? "on" : ""} onClick={() => toggleGroup(id)}>{label}<span>{openGroups[id] ? "⌃" : "⌄"}</span></button>)}
+        </nav>
+        <section className={`editorGroupSection group-${openGroups.special ? "open" : "closed"}`}>
           <h2>기존 도면 깔기</h2>
           <p className="note">기존 평면도 이미지를 배경에 놓고 벽·공간을 따라 그립니다.</p>
           <label className="ghost" style={{ display: "block", textAlign: "center", cursor: "pointer" }}>
@@ -125,7 +133,7 @@ export default function InteriorDrawPanel({
           )}
         </section>
 
-        <section>
+        <section className={`editorGroupSection group-${openGroups.rooms ? "open" : "closed"}`}>
           <h2>작도 캔버스 크기</h2>
           <label className="ctl">
             <span className="ctlHead">
@@ -161,7 +169,7 @@ export default function InteriorDrawPanel({
           <p className="note">새 외곽 = 빈 사각형 벽. 기존 작도는 지워집니다.</p>
         </section>
 
-        <section>
+        <section className={`editorGroupSection group-${openGroups.structure ? "open" : "closed"}`}>
           <h2>도구</h2>
           <div className="toolGrid">
             {(
@@ -293,7 +301,7 @@ export default function InteriorDrawPanel({
             </button>
           </div>
         )}
-      </div>
+      </div>}
     </aside>
   );
 }
