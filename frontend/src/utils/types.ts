@@ -24,6 +24,8 @@ export interface Underlay {
   widthM: number;
   /** 이미지 세로 실측(m). null 이면 원본 비율 유지 */
   heightM: number | null;
+  aspectRatio?: number;
+  lockAspectRatio?: boolean;
   opacity: number;
   visible: boolean;
   locked: boolean;

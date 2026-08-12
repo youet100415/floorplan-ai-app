@@ -929,16 +929,23 @@ export default function EditorPage() {
       const minY = Math.min(...ys);
       const maxX = Math.max(...xs);
       const w = Math.max(maxX - minX, 10);
-      setUnderlay({
-        src,
-        origin: [minX, minY],
-        widthM: w,
-        heightM: null,
-        opacity: 0.45,
-        visible: true,
-        locked: true,
-      });
-      setOverlays((o) => ({ ...o, underlay: true }));
+      const image = new Image();
+      image.onload = () => {
+        const aspectRatio = image.naturalWidth / Math.max(image.naturalHeight, 1);
+        setUnderlay({
+          src,
+          origin: [minX, minY],
+          widthM: w,
+          heightM: w / aspectRatio,
+          aspectRatio,
+          lockAspectRatio: true,
+          opacity: 0.45,
+          visible: true,
+          locked: true,
+        });
+        setOverlays((o) => ({ ...o, underlay: true }));
+      };
+      image.src = src;
     };
     reader.readAsDataURL(file);
   };
