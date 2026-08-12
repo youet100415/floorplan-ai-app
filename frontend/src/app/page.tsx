@@ -1157,7 +1157,29 @@ export default function EditorPage() {
         </div>
       )}
 
-      <main className={`layout${stage !== 1 ? " layoutStage2" : ""}`}>
+      <main className={`layout${stage !== 1 ? " layoutStage2" : ""}${stage === 2 ? " unitEditorLayout" : ""}`}>
+        {stage === 2 && (
+          <nav className="editorRail" aria-label="도면 작업 메뉴">
+            <button type="button" className="editorRailItem" aria-label="템플릿">
+              <span>▤</span><em>템플릿</em>
+            </button>
+            <button type="button" className="editorRailItem active" aria-current="page" aria-label="도면 그리기">
+              <span>▦</span><em>도면 그리기</em>
+            </button>
+            <button type="button" className="editorRailItem" aria-label="제품">
+              <span>◇</span><em>제품</em>
+            </button>
+            <button type="button" className="editorRailItem" aria-label="마감재">
+              <span>▧</span><em>마감재</em>
+            </button>
+            <button type="button" className="editorRailItem" aria-label="설계형 라이브러리">
+              <span>⚒</span><em>설계형<br />라이브러리</em>
+            </button>
+            <button type="button" className="editorRailItem railBottom" aria-label="리소스 관리">
+              <span>▱</span><em>리소스 관리</em>
+            </button>
+          </nav>
+        )}
         {stage === 1 && (
           <Sidebar
             params={params}

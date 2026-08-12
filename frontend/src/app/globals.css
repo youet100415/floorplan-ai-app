@@ -705,8 +705,43 @@ button.stage2Cta {
   flex: 1 1 auto; min-height: 0;
 }
 
+.unitEditorLayout { grid-template-columns: 72px 316px minmax(0, 1fr) 340px; }
+.editorRail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 6px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  min-height: 0;
+}
+.editorRailItem {
+  width: 60px;
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 3px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+.editorRailItem span { font-size: 22px; line-height: 1; color: var(--muted); }
+.editorRailItem em { font-style: normal; line-height: 1.2; text-align: center; }
+.editorRailItem:hover { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); color: var(--ink); }
+.editorRailItem.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, var(--surface)); box-shadow: inset 3px 0 0 var(--accent); }
+.editorRailItem.active span { color: var(--accent); }
+.editorRailItem.railBottom { margin-top: auto; }
+
 @media (max-width: 1200px) {
   .layout { grid-template-columns: 280px minmax(0, 1fr); }
+  .unitEditorLayout { grid-template-columns: 64px 280px minmax(0, 1fr); }
   .metrics { display: none; }
 }
 
