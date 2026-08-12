@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 import store
 from core.generator import FloorPlanGenerator, GenerationRequest, UnitType
+from core.space_programs import evaluate_program, get_program, list_programs
 
 app = FastAPI(
     title="Floorplan AI — 평면/동선 자동 생성 API",
@@ -98,6 +99,27 @@ class GenerateIn(BaseModel):
 
 class ExploreIn(GenerateIn):
     variants: int = Field(6, ge=1, le=24, description="탐색할 대안 개수")
+
+
+class ProgramSpaceIn(BaseModel):
+    """One authored or generated room in a program schedule."""
+
+    kind: str = Field(..., min_length=1, max_length=50)
+    area: float = Field(..., gt=0)
+    width: float | None = Field(None, gt=0)
+
+
+class ProgramAdjacencyIn(BaseModel):
+    source: str = Field(..., min_length=1, max_length=50)
+    target: str = Field(..., min_length=1, max_length=50)
+
+
+class ProgramEvaluateIn(BaseModel):
+    """Program schedule and room graph for hard/soft constraint evaluation."""
+
+    total_area: float = Field(..., gt=0)
+    spaces: list[ProgramSpaceIn] = Field(..., min_length=1)
+    adjacencies: list[ProgramAdjacencyIn] = Field(default_factory=list)
 
 
 def _to_domain(body: GenerateIn, **overrides) -> GenerationRequest:
@@ -268,6 +290,34 @@ def delete_project(project_id: str) -> None:
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/api/space-programs")
+def space_programs() -> dict:
+    """List available use-type programs and their area/relationship rules."""
+    return {"programs": list_programs()}
+
+
+@app.post("/api/space-programs/{program_id}/evaluate")
+def evaluate_space_program(program_id: str, body: ProgramEvaluateIn) -> dict:
+    """Evaluate a generated or manually edited room schedule.
+
+    The endpoint is geometry-independent on purpose: a future layout generator
+    and the existing canvas editor can both use the same explainable checks.
+    """
+    try:
+        program = get_program(program_id)
+        return evaluate_program(
+            program,
+            body.total_area,
+            [space.model_dump(exclude_none=True) for space in body.spaces],
+            {
+                frozenset((adjacency.source, adjacency.target))
+                for adjacency in body.adjacencies
+            },
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/api/presets")
