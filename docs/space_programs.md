@@ -33,6 +33,13 @@ an area schedule, explainable checks and a score. It is deliberately
 geometry-independent so both the existing canvas editor and a later automatic
 interior generator can reuse it.
 
+`POST /api/space-programs/{program_id}/generate` accepts a unit polygon and
+returns up to eight conservative first-pass room layouts. Each option includes
+room polygons, an area schedule, hard failures, soft warnings, a score and a
+`valid` flag. The generator intentionally leaves unused area available rather
+than enlarging capped rooms such as the entrance. This is a planning aid; it
+does not replace a licensed architectural/code review.
+
 ```json
 {
   "total_area": 160,

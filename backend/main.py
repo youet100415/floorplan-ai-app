@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 import store
 from core.generator import FloorPlanGenerator, GenerationRequest, UnitType
 from core.space_programs import evaluate_program, get_program, list_programs
+from core.interior_generator import generate_interior_layouts
 
 app = FastAPI(
     title="Floorplan AI — 평면/동선 자동 생성 API",
@@ -120,6 +121,12 @@ class ProgramEvaluateIn(BaseModel):
     total_area: float = Field(..., gt=0)
     spaces: list[ProgramSpaceIn] = Field(..., min_length=1)
     adjacencies: list[ProgramAdjacencyIn] = Field(default_factory=list)
+
+
+class InteriorGenerateIn(BaseModel):
+    boundary: list[tuple[float, float]] = Field(..., min_length=3)
+    entrance: tuple[float, float] | None = None
+    variants: int = Field(3, ge=1, le=8)
 
 
 def _to_domain(body: GenerateIn, **overrides) -> GenerationRequest:
@@ -316,6 +323,17 @@ def evaluate_space_program(program_id: str, body: ProgramEvaluateIn) -> dict:
                 for adjacency in body.adjacencies
             },
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/space-programs/{program_id}/generate")
+def generate_space_program_layout(program_id: str, body: InteriorGenerateIn) -> dict:
+    """Generate and rank conservative first-pass interior layout variants."""
+    try:
+        program = get_program(program_id)
+        options = generate_interior_layouts(body.boundary, program, body.entrance, body.variants)
+        return {"program": program_id, "count": len(options), "best": options[0] if options else None, "options": options}
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
