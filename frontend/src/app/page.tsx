@@ -123,6 +123,8 @@ export default function EditorPage() {
   /** 다음에 찍을 점의 역할 — 곡선 모드면 3점 원호의 중간점. */
   const [nextRole, setNextRole] = useState<VertexRole>("corner");
   const [underlay, setUnderlay] = useState<Underlay | null>(null);
+  const [underlayAction, setUnderlayAction] = useState<"move" | "calibrate" | null>(null);
+  const [calibrationMm, setCalibrationMm] = useState(1000);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
   /** 크기 편집 대상 코어. 도면에서 사각 핸들을 클릭하면 지정된다. */
@@ -1232,6 +1234,11 @@ export default function EditorPage() {
             canGoApply={!!plan}
             underlay={underlay}
             onUnderlay={setUnderlay}
+            underlayAction={underlayAction}
+            onUnderlayAction={setUnderlayAction}
+            calibrationMm={calibrationMm}
+            onCalibrationMm={setCalibrationMm}
+            onSaveSample={() => localStorage.setItem("floorplan-ai-unit-underlay-sample", JSON.stringify({ underlay, authorDoc, authorW, authorD }))}
             onLoadUnderlay={loadUnderlay}
             onClearUnderlay={() => setUnderlay(null)}
           />
@@ -1294,6 +1301,9 @@ export default function EditorPage() {
               tool={planTool}
               openingKind={planOpeningKind}
               underlay={underlay}
+              onUnderlay={setUnderlay}
+              underlayAction={underlayAction}
+              calibrationMm={calibrationMm}
             />
           </div>
         ) : stage === 3 && selectedUnit && selectedPlanDoc ? (

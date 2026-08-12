@@ -42,6 +42,7 @@ import type {
   Wall,
   Zone,
 } from "@/lib/plan/types";
+import type { Underlay } from "@/utils/types";
 import { defaultSettings } from "@/lib/plan/types";
 import { computeWallPolygons } from "@/lib/plan/wall-join";
 
@@ -56,7 +57,10 @@ interface Props {
   /** 공간 센터·문 연결 그래프 표시 */
   showSpaceGraph?: boolean;
   /** Reference floorplan image shown behind the unit drawing. */
-  underlay?: { src: string; origin: [number, number]; widthM: number; heightM: number | null; opacity: number; visible: boolean } | null;
+  underlay?: Underlay | null;
+  onUnderlay?: (underlay: Underlay | null) => void;
+  underlayAction?: "move" | "calibrate" | null;
+  calibrationMm?: number;
 }
 
 export default function PlanDocCanvas({
@@ -68,6 +72,9 @@ export default function PlanDocCanvas({
   readOnly = false,
   showSpaceGraph = true,
   underlay = null,
+  onUnderlay,
+  underlayAction = null,
+  calibrationMm = 1000,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const settings = defaultSettings();
@@ -81,6 +88,9 @@ export default function PlanDocCanvas({
   /** 공간 센터 hover (ZIP 예시 인터랙션) */
   const [hoverSpaceId, setHoverSpaceId] = useState<string | null>(null);
   const panRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const underlayDragRef = useRef<{ start: Point; origin: [number, number] } | null>(null);
+  const [calibrationStart, setCalibrationStart] = useState<Point | null>(null);
+  const [calibrationEnd, setCalibrationEnd] = useState<Point | null>(null);
   const fitted = useRef(false);
   /** 벽 연속 작도 중 추가한 벽 id — 마지막 구간 되돌리기용 */
   const wallChainRef = useRef<string[]>([]);
@@ -289,6 +299,13 @@ export default function PlanDocCanvas({
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    if (underlayDragRef.current && underlay && onUnderlay) {
+      const start = underlayDragRef.current;
+      const p = toWorld(e);
+      if (underlayAction === "move") onUnderlay({ ...underlay, origin: [start.origin[0] + p.x - start.start.x, start.origin[1] + p.y - start.start.y] });
+      else setCalibrationEnd(p);
+      return;
+    }
     if (panRef.current) {
       const p = panRef.current;
       setView((v) => ({
@@ -305,6 +322,13 @@ export default function PlanDocCanvas({
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (e.button === 0 && underlay && onUnderlay && underlayAction) {
+      const start = toWorld(e);
+      e.currentTarget.setPointerCapture(e.pointerId);
+      underlayDragRef.current = { start, origin: underlay.origin };
+      if (underlayAction === "calibrate") { setCalibrationStart(start); setCalibrationEnd(start); }
+      return;
+    }
     if (e.button === 1 || tool === "pan" || e.altKey) {
       e.currentTarget.setPointerCapture(e.pointerId);
       panRef.current = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy };
@@ -395,6 +419,16 @@ export default function PlanDocCanvas({
 
   const endPan = () => {
     panRef.current = null;
+    if (underlayDragRef.current && underlay && onUnderlay && underlayAction === "calibrate" && calibrationStart && calibrationEnd) {
+      const selectedLength = Math.max(Math.abs(calibrationEnd.x - calibrationStart.x), Math.abs(calibrationEnd.y - calibrationStart.y));
+      if (selectedLength > 0.01) {
+        const factor = calibrationMm / 1000 / selectedLength;
+        onUnderlay({ ...underlay, widthM: underlay.widthM * factor, heightM: (underlay.heightM ?? underlay.widthM) * factor });
+      }
+    }
+    underlayDragRef.current = null;
+    setCalibrationStart(null);
+    setCalibrationEnd(null);
   };
 
   const onWheel = (e: React.WheelEvent) => {
@@ -537,6 +571,7 @@ export default function PlanDocCanvas({
           const b = S({ x: underlay.origin[0] + underlay.widthM, y: underlay.origin[1] + height });
           return <image href={underlay.src} x={Math.min(a.x, b.x)} y={Math.min(a.y, b.y)} width={Math.max(1, Math.abs(b.x - a.x))} height={Math.max(1, Math.abs(b.y - a.y))} opacity={underlay.opacity} preserveAspectRatio="none" pointerEvents="none" />;
         })()}
+        {calibrationStart && calibrationEnd && (() => { const a = S(calibrationStart); const b = S(calibrationEnd); return <rect x={Math.min(a.x, b.x)} y={Math.min(a.y, b.y)} width={Math.abs(b.x - a.x)} height={Math.abs(b.y - a.y)} fill="rgba(0,122,255,0.12)" stroke="#007aff" strokeWidth={2} strokeDasharray="5 4" pointerEvents="none" />; })()}
 
         {/* zones */}
         {doc.zones.map((z) => {

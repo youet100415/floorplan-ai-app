@@ -32,6 +32,11 @@ interface Props {
   onUnderlay: (underlay: Underlay | null) => void;
   onLoadUnderlay: (file: File) => void;
   onClearUnderlay: () => void;
+  underlayAction: "move" | "calibrate" | null;
+  onUnderlayAction: (action: "move" | "calibrate" | null) => void;
+  calibrationMm: number;
+  onCalibrationMm: (value: number) => void;
+  onSaveSample: () => void;
 }
 
 export default function InteriorDrawPanel({
@@ -60,6 +65,11 @@ export default function InteriorDrawPanel({
   onUnderlay,
   onLoadUnderlay,
   onClearUnderlay,
+  underlayAction,
+  onUnderlayAction,
+  calibrationMm,
+  onCalibrationMm,
+  onSaveSample,
 }: Props) {
   return (
     <aside className="sidebar panel interiorPanel">
@@ -97,6 +107,11 @@ export default function InteriorDrawPanel({
               <label className="checkRow"><input type="checkbox" checked={underlay.lockAspectRatio !== false} onChange={(e) => onUnderlay({ ...underlay, lockAspectRatio: e.target.checked })} /> 원본 이미지 가로·세로 비율 묶기</label>
               <label className="ctl"><span className="ctlHead">도면 투명도 <output>{Math.round(underlay.opacity * 100)}%</output></span><input type="range" min={0.1} max={1} step={0.05} value={underlay.opacity} onChange={(e) => onUnderlay({ ...underlay, opacity: Number(e.target.value) })} /></label>
               <p className="note">도면에 표시된 실제 치수(예: 외벽 8400mm)를 가로 또는 세로 길이에 맞추면 해당 스케일로 작도합니다.</p>
+            <button type="button" className={underlayAction === "move" ? "primary" : "ghost"} style={{ marginTop: 8 }} onClick={() => onUnderlayAction(underlayAction === "move" ? null : "move")}>도면 마우스로 이동</button>
+            <label className="ctl" style={{ marginTop: 8 }}><span className="ctlHead">기준 치수 <output>{calibrationMm} mm</output></span><input type="range" min={100} max={50000} step={50} value={calibrationMm} onChange={(e) => onCalibrationMm(Number(e.target.value))} /></label>
+            <button type="button" className={underlayAction === "calibrate" ? "primary" : "ghost"} onClick={() => onUnderlayAction(underlayAction === "calibrate" ? null : "calibrate")}>기준 치수 박스 그리기</button>
+            <p className="note">기준 치수 박스를 켠 뒤 도면의 치수선 구간을 드래그하면 입력한 mm에 맞춰 자동 스케일됩니다.</p>
+            <button type="button" className="ghost" onClick={onSaveSample}>현재 도면 샘플 저장</button>
             <button type="button" className="ghost danger" style={{ marginTop: 8 }} onClick={onClearUnderlay}>
               배경 도면 제거
             </button>
