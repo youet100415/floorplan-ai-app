@@ -723,6 +723,31 @@ button.stage2Cta {
 .metrics { border-right: 0; border-left: 1px solid var(--border); }
 .metrics.empty { color: var(--muted); }
 
+.unitSettings {
+  border-right: 0;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  min-width: 0;
+  overflow: hidden;
+}
+.unitSettingsTabs { display: flex; border-bottom: 1px solid var(--border); padding: 8px 8px 0; }
+.unitSettingsTab { flex: 1; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 9px 6px; color: var(--muted); }
+.unitSettingsTab.on { color: var(--accent); border-bottom-color: var(--accent); }
+.unitSettingsScroll { overflow: auto; min-height: 0; }
+.unitSettingsTitle { display: flex; justify-content: space-between; padding: 16px; border-bottom: 1px solid var(--border); }
+.unitSettingsTitle span { color: var(--muted); font-size: 11px; }
+.unitSettingsSection { border-bottom: 1px solid var(--border); padding: 0 !important; }
+.unitSettingsHeader { width: 100%; display: flex; justify-content: space-between; border: 0; border-radius: 0; background: transparent; padding: 16px; text-align: left; }
+.unitSettingsHeader span { color: var(--muted); }
+.unitSettingsBody { padding: 0 16px 16px; }
+.unitSettingsStats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 11px; color: var(--muted); }
+.unitSettingsStats span { border: 1px solid var(--border); border-radius: 6px; padding: 8px 5px; text-align: center; }
+.unitSettingsStats b { display: block; color: var(--ink); font-size: 16px; }
+.ctxTitle { display: block; padding: 8px 10px; font-size: 12px; }
+.ctxField { display: block; padding: 7px 10px; font-size: 11px; color: var(--muted); }
+.ctxField input { width: 100%; margin-top: 4px; padding: 5px 6px; }
+.ctxMetric { padding: 5px 10px 8px; font-size: 11px; color: var(--muted); }
+
 .panel { /* flex column shell */ }
 .panelTabs {
   flex: 0 0 auto;

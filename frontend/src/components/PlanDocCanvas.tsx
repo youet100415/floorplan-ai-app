@@ -337,7 +337,7 @@ export default function PlanDocCanvas({
     // 우클릭: 작도 중이면 확인/취소 메뉴
     if (e.button === 2) {
       e.preventDefault();
-      if (isDrawing && !readOnly) {
+      if (!readOnly) {
         openDrawMenu(e.clientX, e.clientY);
       }
       return;
@@ -543,7 +543,7 @@ export default function PlanDocCanvas({
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (isDrawing && !readOnly) openDrawMenu(e.clientX, e.clientY);
+          if (!readOnly) openDrawMenu(e.clientX, e.clientY);
         }}
       >
         <defs>
@@ -898,13 +898,27 @@ export default function PlanDocCanvas({
         </div>
       )}
 
-      {ctxMenu && isDrawing && (
+      {ctxMenu && (
         <div
           className="ctxMenu"
           style={{ left: ctxMenu.x, top: ctxMenu.y }}
           onPointerDown={(e) => e.stopPropagation()}
           onContextMenu={(e) => e.preventDefault()}
         >
+          {!isDrawing && <>
+            <strong className="ctxTitle">빠른 설정</strong>
+            {selection?.kind === "wall" && (() => {
+              const wall = doc.walls.find((item) => item.id === selection.id);
+              if (!wall) return null;
+              return <>
+                <label className="ctxField">벽 두께 (mm)<input type="number" min={50} max={1000} step={10} value={Math.round(wall.thickness * 1000)} onChange={(e) => { const thickness = Math.max(0.05, Number(e.target.value || 50) / 1000); patchDoc((d) => ({ ...d, walls: d.walls.map((w) => w.id === wall.id ? { ...w, thickness } : w) })); }} /></label>
+                <div className="ctxMetric">길이 {Math.round(dist(wall.a, wall.b) * 1000)} mm</div>
+              </>;
+            })()}
+            <button type="button" onClick={() => { setCtxMenu(null); onChange({ ...doc }); }}>선택 요소 새로고침</button>
+            {selection && <button type="button" onClick={() => { removeSelected(); setCtxMenu(null); }}>선택 요소 삭제</button>}
+          </>}
+          {isDrawing && <>
           <button
             type="button"
             className="ctxOk"
@@ -929,6 +943,7 @@ export default function PlanDocCanvas({
             </span>
             <kbd>⌫</kbd>
           </button>
+          </>}
         </div>
       )}
     </div>

@@ -8,6 +8,7 @@ import InteriorApplyPanel from "@/components/InteriorApplyPanel";
 import InteriorDrawPanel from "@/components/InteriorDrawPanel";
 import MetricsPanel from "@/components/MetricsPanel";
 import PlanDocCanvas from "@/components/PlanDocCanvas";
+import UnitSettingsPanel from "@/components/UnitSettingsPanel";
 import Sidebar from "@/components/Sidebar";
 import {
   blankAuthorDocument,
@@ -1390,7 +1391,19 @@ export default function EditorPage() {
           />
         )}
 
-        <MetricsPanel
+        {stage === 2 ? (
+          <UnitSettingsPanel
+            canvasW={authorW}
+            canvasD={authorD}
+            wallCount={authorDoc.walls.length}
+            zoneCount={authorDoc.zones.length}
+            openingCount={authorDoc.openings.length}
+            underlay={underlay}
+            onCanvasW={setAuthorW}
+            onCanvasD={setAuthorD}
+            onUnderlay={setUnderlay}
+          />
+        ) : <MetricsPanel
           plan={plan}
           mode={mode}
           options={options}
@@ -1409,7 +1422,7 @@ export default function EditorPage() {
           selectedId={selectedId}
           population={population}
           stage={stage}
-        />
+        />}
       </main>
     </div>
   );
