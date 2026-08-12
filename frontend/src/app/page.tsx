@@ -928,15 +928,20 @@ export default function EditorPage() {
       const minX = Math.min(...xs);
       const minY = Math.min(...ys);
       const maxX = Math.max(...xs);
-      const w = Math.max(maxX - minX, 10);
       const image = new Image();
       image.onload = () => {
         const aspectRatio = image.naturalWidth / Math.max(image.naturalHeight, 1);
+        const isUnitEditor = stage === 2;
+        const availableW = isUnitEditor ? authorW : Math.max(maxX - minX, 10);
+        const availableH = isUnitEditor ? authorD : Math.max(Math.max(...ys) - minY, 10);
+        // Fit to the active canvas while preserving the image's original ratio.
+        const widthM = Math.min(availableW, availableH * aspectRatio);
+        const heightM = widthM / aspectRatio;
         setUnderlay({
           src,
-          origin: [minX, minY],
-          widthM: w,
-          heightM: w / aspectRatio,
+          origin: isUnitEditor ? [0, 0] : [minX, minY],
+          widthM,
+          heightM,
           aspectRatio,
           lockAspectRatio: true,
           opacity: 0.45,
