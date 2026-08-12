@@ -240,34 +240,91 @@ export function interiorToTemplate(
     offset = entrySide === "south" || entrySide === "north" ? lp[0] : lp[1];
   }
 
-  return {
+  const rooms = it.rooms.map((r) => ({
+    id: r.id,
+    name: r.name,
+    kind: r.kind,
+    polygon: r.polygon.map(toLocal),
+  }));
+  const doors = it.doors.map((door) => ({
+    id: door.id,
+    category: door.category,
+    type: door.type,
+    width: door.width,
+    at: toLocal(door.position),
+  }));
+  const now = new Date().toISOString();
+
+  return normalizeUnitTemplate({
+    schema_version: "1.1.0",
+    unit: "m",
     id: `user-${Date.now().toString(36)}`,
     name,
     unitTypeHint: unit.type,
     version: 1,
+    library_version: 1,
+    status: "draft",
+    coordinate_system: "local_xy_meters_bottom_left",
     bbox: { w, d },
+    anchor_point: { type: "bottom_left", x: 0, y: 0 },
     entry: {
       side: entrySide,
       offset,
       width: entryDoor?.width ?? 0.9,
     },
-    rooms: it.rooms.map((r) => ({
-      id: r.id,
-      name: r.name,
-      kind: r.kind,
-      polygon: r.polygon.map(toLocal),
+    rooms,
+    doors,
+    connection_points: doors.map((d) => ({
+      connection_id: d.id,
+      type: "door" as const,
+      at: d.at,
+      category: d.category,
     })),
-    doors: it.doors.map((door) => ({
-      id: door.id,
-      category: door.category,
-      type: door.type,
-      width: door.width,
-      at: toLocal(door.position),
-    })),
-  };
+    placement_constraints: {
+      zone_categories: [unit.type, unit.type.toLowerCase()].filter(Boolean),
+      min_zone_area_sqm: Math.max(1, w * d * 0.5),
+    },
+    classification: {
+      tags: [name, unit.type].filter(Boolean),
+      room_kinds: [...new Set(rooms.map((r) => r.kind))],
+      object_summary: [
+        ...rooms.map((r) => r.name),
+        ...doors.map((d) => d.category),
+      ],
+    },
+    created_at: now,
+    updated_at: now,
+  });
 }
 
 const LIB_KEY = "floorplan-ai-user-templates-v1";
+
+/** 구버전 템플릿 필드 보정 */
+export function normalizeUnitTemplate(raw: Partial<UnitTemplate> & { id: string; name: string }): UnitTemplate {
+  const bbox = raw.bbox ?? { w: 8, d: 7 };
+  return {
+    schema_version: raw.schema_version ?? "1.1.0",
+    unit: raw.unit ?? "m",
+    id: raw.id,
+    name: raw.name,
+    unitTypeHint: raw.unitTypeHint,
+    version: raw.version ?? 1,
+    library_version: raw.library_version ?? raw.version ?? 1,
+    status: raw.status ?? "draft",
+    coordinate_system: raw.coordinate_system ?? "local_xy_meters_bottom_left",
+    bbox,
+    anchor_point: raw.anchor_point ?? { type: "bottom_left", x: 0, y: 0 },
+    entry: raw.entry ?? { side: "south", offset: bbox.w / 2, width: 0.9 },
+    rooms: raw.rooms ?? [],
+    doors: raw.doors ?? [],
+    connection_points: raw.connection_points,
+    placement_constraints: raw.placement_constraints,
+    classification: raw.classification,
+    validation: raw.validation,
+    created_at: raw.created_at,
+    updated_at: raw.updated_at ?? new Date().toISOString(),
+  };
+}
 
 export function loadUserTemplates(): UnitTemplate[] {
   if (typeof window === "undefined") return [];
@@ -275,15 +332,21 @@ export function loadUserTemplates(): UnitTemplate[] {
     const raw = window.localStorage.getItem(LIB_KEY);
     if (!raw) return [];
     const j = JSON.parse(raw);
-    return Array.isArray(j) ? (j as UnitTemplate[]) : [];
+    if (!Array.isArray(j)) return [];
+    return j.map((t) => normalizeUnitTemplate(t as UnitTemplate));
   } catch {
     return [];
   }
 }
 
 export function saveUserTemplate(tpl: UnitTemplate): UnitTemplate[] {
-  const list = loadUserTemplates().filter((t) => t.id !== tpl.id);
-  list.unshift(tpl);
+  const normalized = normalizeUnitTemplate({
+    ...tpl,
+    updated_at: new Date().toISOString(),
+    created_at: tpl.created_at ?? new Date().toISOString(),
+  });
+  const list = loadUserTemplates().filter((t) => t.id !== normalized.id);
+  list.unshift(normalized);
   const next = list.slice(0, 40);
   window.localStorage.setItem(LIB_KEY, JSON.stringify(next));
   return next;

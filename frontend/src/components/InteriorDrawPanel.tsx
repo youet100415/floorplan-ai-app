@@ -151,22 +151,27 @@ export default function InteriorDrawPanel({
         </section>
 
         <section>
-          <h2>라이브러리 저장</h2>
+          <h2>유닛 라이브러리 저장</h2>
+          <p className="note">
+            저장 시 검증합니다. 통과하면 <strong>배치 가능(published/valid)</strong>, 오류가
+            있으면 <strong>초안(draft)</strong>으로만 저장되며 배치 단계에서는 쓸 수 없습니다.
+            원본 라이브러리와 프로젝트 배치 인스턴스는 분리됩니다.
+          </p>
           <label className="ctl">
-            <span className="ctlHead">이름</span>
+            <span className="ctlHead">유닛 이름</span>
             <input
               className="fullSelect"
               value={saveName}
-              placeholder="예: 2BR 표준 A"
+              placeholder="예: 84A 침실 Type 01"
               onChange={(e) => onSaveName(e.target.value)}
             />
           </label>
           <label className="ctl">
-            <span className="ctlHead">유닛 타입 힌트</span>
+            <span className="ctlHead">분류 · 추천 타입 힌트</span>
             <input
               className="fullSelect"
               value={unitTypeHint}
-              placeholder="1BR / 2BR / 3BR"
+              placeholder="1BR / 2BR / bedroom"
               onChange={(e) => onUnitTypeHint(e.target.value)}
             />
           </label>
@@ -176,15 +181,15 @@ export default function InteriorDrawPanel({
             style={{ width: "100%", marginTop: 10 }}
             onClick={onSave}
           >
-            모듈 저장 (유닛 배치에서 사용)
+            검증 후 라이브러리 저장
           </button>
           <p className="note">
-            저장본은 브라우저에 남고, 평면 완성 → 유닛 배치 목록에 표시됩니다.
+            현재는 브라우저 저장소에 보관됩니다. 평면 완성 → 유닛 배치에서 선택·적용합니다.
           </p>
         </section>
 
         <section>
-          <h2>저장된 내부 평면 · {userTemplates.length}</h2>
+          <h2>유닛 라이브러리 · {userTemplates.length}</h2>
           {userTemplates.length === 0 ? (
             <p className="note">아직 없습니다. 그린 뒤 저장하세요.</p>
           ) : (
@@ -195,9 +200,15 @@ export default function InteriorDrawPanel({
                   <em>
                     {t.bbox.w.toFixed(1)}×{t.bbox.d.toFixed(1)} m
                     {t.unitTypeHint ? ` · ${t.unitTypeHint}` : ""}
+                    {t.status ? ` · ${t.status}` : ""}
                   </em>
                   <span>
                     {t.rooms.length}실 · 문 {t.doors.length}
+                    {t.validation?.placeable === false
+                      ? " · 배치 불가"
+                      : t.validation?.warnings?.length
+                        ? ` · 경고 ${t.validation.warnings.length}`
+                        : " · 배치 가능"}
                   </span>
                   <div className="drawRow" style={{ marginTop: 6 }}>
                     <button

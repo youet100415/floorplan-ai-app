@@ -2,8 +2,18 @@
 
 import type { UnitTemplate } from "../types";
 
+const libBase = {
+  schema_version: "1.1.0" as const,
+  unit: "m" as const,
+  library_version: 1,
+  status: "published" as const,
+  coordinate_system: "local_xy_meters_bottom_left",
+  anchor_point: { type: "bottom_left" as const, x: 0, y: 0 },
+};
+
 /** 1BR — 현관 남측, 거실·침실·욕실 */
 export const TPL_1BR_A: UnitTemplate = {
+  ...libBase,
   id: "1BR_A",
   name: "1BR Type A",
   unitTypeHint: "1BR",
@@ -76,6 +86,7 @@ export const TPL_1BR_A: UnitTemplate = {
 
 /** 2BR */
 export const TPL_2BR_A: UnitTemplate = {
+  ...libBase,
   id: "2BR_A",
   name: "2BR Type A",
   unitTypeHint: "2BR",
@@ -160,6 +171,7 @@ export const TPL_2BR_A: UnitTemplate = {
 
 /** 3BR */
 export const TPL_3BR_A: UnitTemplate = {
+  ...libBase,
   id: "3BR_A",
   name: "3BR Type A",
   unitTypeHint: "3BR",
@@ -254,7 +266,42 @@ export const TPL_3BR_A: UnitTemplate = {
   ],
 };
 
-export const BUILTIN_TEMPLATES: UnitTemplate[] = [TPL_1BR_A, TPL_2BR_A, TPL_3BR_A];
+/** 내장 템플릿에 분류·접속점·배치 제약·검증 메타 보강 */
+function enrichBuiltin(t: UnitTemplate): UnitTemplate {
+  return {
+    ...t,
+    connection_points:
+      t.connection_points ??
+      t.doors.map((d) => ({
+        connection_id: d.id,
+        type: "door" as const,
+        at: d.at,
+        category: d.category,
+      })),
+    placement_constraints: t.placement_constraints ?? {
+      zone_categories: [t.unitTypeHint ?? t.name, (t.unitTypeHint ?? "").toLowerCase()].filter(
+        Boolean,
+      ),
+      min_zone_area_sqm: Math.max(8, t.bbox.w * t.bbox.d * 0.55),
+    },
+    classification: t.classification ?? {
+      tags: [t.unitTypeHint ?? "", t.name].filter(Boolean),
+      room_kinds: [...new Set(t.rooms.map((r) => r.kind))],
+      object_summary: t.rooms.map((r) => r.name),
+    },
+    validation: t.validation ?? {
+      is_valid: true,
+      placeable: true,
+      errors: [],
+      warnings: [],
+      validated_at: new Date(0).toISOString(),
+    },
+  };
+}
+
+export const BUILTIN_TEMPLATES: UnitTemplate[] = [TPL_1BR_A, TPL_2BR_A, TPL_3BR_A].map(
+  enrichBuiltin,
+);
 
 export function listTemplates(): UnitTemplate[] {
   return BUILTIN_TEMPLATES;

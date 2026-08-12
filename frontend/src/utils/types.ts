@@ -297,10 +297,58 @@ export interface UnitScore {
   checks: { code: string; level: "pass" | "warn" | "fail"; message: string }[];
 }
 
-/** 유닛에 적용된 내부 평면(월드 좌표). */
+/** 라이브러리 유닛 상태 (명세: draft / valid / published / archived) */
+export type UnitLibraryStatus = "draft" | "valid" | "published" | "archived";
+
+export interface UnitValidationIssue {
+  code: string;
+  level: "error" | "warning";
+  message: string;
+}
+
+export interface UnitValidation {
+  is_valid: boolean;
+  /** 배치 가능 여부 — 치명 오류 없으면 true */
+  placeable: boolean;
+  errors: UnitValidationIssue[];
+  warnings: UnitValidationIssue[];
+  validated_at: string;
+}
+
+export interface ConnectionPoint {
+  connection_id: string;
+  type: "door" | "corridor" | "service";
+  /** 로컬 좌표 (템플릿) 또는 월드 (인스턴스) */
+  at: Pt;
+  wall_id?: string;
+  offset?: number;
+  direction?: "inward" | "outward";
+  category?: DoorCategory;
+}
+
+export interface PlacementConstraints {
+  zone_categories: string[];
+  min_zone_area_sqm?: number;
+  requires_exterior_contact?: boolean;
+}
+
+/** 프로젝트에 배치된 인스턴스 변환 정보 */
+export interface ProjectInstanceMeta {
+  instance_id: string;
+  source_unit_id: string;
+  library_version: number;
+  rotation_deg: number;
+  mirrored: boolean;
+  scale: number;
+  placed_at: string;
+}
+
+/** 유닛에 적용된 내부 평면(월드 좌표) — 프로젝트 인스턴스. */
 export interface UnitInterior {
   unitId: string;
   templateId: string | null;
+  /** 라이브러리 원본 ID (복제본 편집 시 원본 불변) */
+  source_unit_id?: string | null;
   linkedGroupId?: string;
   rooms: Room[];
   doors: Door[];
@@ -310,19 +358,28 @@ export interface UnitInterior {
   edges?: number;
   areaM2?: number;
   score?: UnitScore;
-  /** 사용자가 직접 작도한 데이터면 true (학습/라이브러리 후보) */
+  connection_points?: ConnectionPoint[];
+  project_instance?: ProjectInstanceMeta;
+  /** 사용자가 직접 작도한 데이터면 true (라이브러리 후보) */
   handAuthored?: boolean;
 }
 
-/** 라이브러리 템플릿 — 로컬 정규화 좌표(0~1) 또는 m 단위 bbox 기준. */
+/** 라이브러리 템플릿 — 재사용 원본 (명세 Unit Library). */
 export interface UnitTemplate {
+  schema_version: string;
+  /** 측정 단위 — 앱 내부 기본 m */
+  unit: "m" | "mm";
   id: string;
   name: string;
-  /** 대상 유닛 타입 힌트 (1BR, 2BR…) */
+  /** 대상 유닛 타입 힌트 (1BR, 2BR, bedroom…) */
   unitTypeHint?: string;
   version: number;
+  library_version: number;
+  status: UnitLibraryStatus;
+  coordinate_system: string;
   /** 로컬 좌표계 가로·세로 (m). rooms/doors 는 이 박스 안. */
   bbox: { w: number; d: number };
+  anchor_point: { type: "bottom_left" | "center"; x: number; y: number };
   entry: { side: "south" | "north" | "east" | "west"; offset: number; width: number };
   rooms: { id: string; name: string; kind: RoomKind; polygon: Pt[] }[];
   doors: {
@@ -332,6 +389,17 @@ export interface UnitTemplate {
     width: number;
     at: Pt;
   }[];
+  connection_points?: ConnectionPoint[];
+  placement_constraints?: PlacementConstraints;
+  /** 유닛 분류 및 추천 메타데이터 (AI 학습과 구분) */
+  classification?: {
+    tags: string[];
+    room_kinds: RoomKind[];
+    object_summary: string[];
+  };
+  validation?: UnitValidation;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface PopulationPoint {

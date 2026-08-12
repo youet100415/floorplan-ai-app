@@ -59,6 +59,28 @@ export const CHROME: Record<Mode, Chrome> = {
   },
 };
 
+/**
+ * 건축 도면용 벽체 저톤 (참고 녹화: ~#989898 중회색 포셰).
+ * 고대비 검정/원색 스트로크 대신 차분한 그레이 매스.
+ */
+export const WALL: Record<
+  Mode,
+  { fill: string; stroke: string; active: string; exterior: string }
+> = {
+  light: {
+    fill: "#8f8f8b",
+    stroke: "#6a6a66",
+    active: "#5a7aaa",
+    exterior: "#6e6e6a",
+  },
+  dark: {
+    fill: "#7a7a74",
+    stroke: "#a0a098",
+    active: "#7a9ec8",
+    exterior: "#9a9a92",
+  },
+};
+
 export function seriesColor(mode: Mode, index: number): string {
   const slots = SERIES[mode];
   return slots[Math.min(index, slots.length - 1)];

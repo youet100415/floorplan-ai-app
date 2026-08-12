@@ -129,19 +129,28 @@ cd backend && .venv/Scripts/python selftest.py
 - 세대 타입이 4개를 넘으면 색만으로는 구분이 보장되지 않아, 도면의 모든
   세대에 타입명을 직접 라벨로 표기합니다.
 
-## 로드맵 (1 → 2 → 3단계)
+## 워크스페이스 구조 (안 A)
 
-| 단계 | 내용 | 상태 |
-|------|------|------|
-| **1** | 외곽·복도·코어·유닛 구획, 피난 동선, 건물 레벨 점수 | **현재** |
-| **2** | 내부 라이브러리 피팅, 3축 점수, 링크 문 일괄, 존·피난·Population 분석 UI | **현재 (MVP)** |
-| **3** | Archie AI 에이전트 LLM, (선택) GLB / BIM | 이후 |
+| 글로벌 탭 | 내용 |
+|-----------|------|
+| **유닛 에디터** | 재사용 모듈 작도 → 검증 → 라이브러리 저장 (독립 캔버스) |
+| **평면 완성** | ① 조닝 → ② 유닛 배치 (라이브러리 모듈 적용) |
 
-**데이터 원칙**: 편집·링크·문 폭의 원본은 **JSON**. GLB는 3D 산출물.
+```text
+[유닛 에디터] 제작 → 검증 → 저장
+                         ↓
+[평면 완성] 조닝 생성 → 유닛 선택 배치 → 검토
+```
 
-상세 아키텍처·스키마·스코어링·다이어그램·모듈 배치:
+- 라이브러리 유닛 = 원본 / 배치 유닛 = 프로젝트 복제본 (`source_unit_id`, `project_instance`)
+- 저장 검증: 오류 시 `draft`(배치 불가) 저장 가능 · 통과 시 `published`/`valid`
+- MVP: 템플릿 배치 우선. 조닝 화면에서 처음부터 유닛 작도는 보조·후속.
+- 추천 점수: 용도 40% · 면적 30% · 폭/깊이 15% · 접속 10% · 외곽 5% (분류·추천 메타, 모델 학습 아님)
+- 보르노이/Power Diagram: 배치 필수 과정이 아님 — 후속 자동 보정·대안 생성
+- 현재 라이브러리 저장소: 브라우저 localStorage (서버 DB 아님)
 
-→ **[docs/FloorplanAI_System_Specification.md](docs/FloorplanAI_System_Specification.md)**
+상세 UX 플로우: **[docs/unit_editor_ux_flow_spec_ko.md](docs/unit_editor_ux_flow_spec_ko.md)**  
+시스템 명세: **[docs/FloorplanAI_System_Specification.md](docs/FloorplanAI_System_Specification.md)**
 
 ### 공간 점수 (2단계, 유닛 내부)
 
@@ -153,8 +162,8 @@ Total = Compliance×40% + Adaptivity×30% + Daylight×30%
 - Adaptivity — 템플릿 변형·고정/가변 제약  
 - Daylight — 주요 실 외피 접촉  
 
-내부 도구로 그린 고득점 평면을 `data/library/units/*.unit.json`에 쌓아
-“라이브러리 학습”으로 재사용한다.
+유닛 에디터에서 검증·저장한 모듈을 라이브러리(브라우저 저장)에 쌓아
+평면 완성 → 유닛 배치에서 재사용한다.
 
 ### 다이어그램 · 분석 (명세 v2)
 

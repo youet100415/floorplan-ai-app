@@ -106,6 +106,7 @@ export function fitTemplateToUnit(unit: Unit, tpl: UnitTemplate): UnitInterior {
   const interior: UnitInterior = {
     unitId: unit.id,
     templateId: tpl.id,
+    source_unit_id: tpl.id,
     linkedGroupId: tpl.id,
     rooms,
     doors,
@@ -113,6 +114,23 @@ export function fitTemplateToUnit(unit: Unit, tpl: UnitTemplate): UnitInterior {
     edges: countEdges(unit.polygon),
     egressPath: computeEgressPath(unit.polygon, unit.door_point),
     zones: buildApartmentZones(unit, rooms),
+    connection_points: doors.map((d) => ({
+      connection_id: d.id,
+      type: "door" as const,
+      at: d.position,
+      category: d.category,
+    })),
+    /** 프로젝트 인스턴스 — 라이브러리 원본과 분리 */
+    project_instance: {
+      instance_id: `inst-${unit.id}-${Date.now().toString(36)}`,
+      source_unit_id: tpl.id,
+      library_version: tpl.library_version ?? tpl.version ?? 1,
+      rotation_deg: flipY || flipX ? 0 : 0,
+      mirrored: flipX,
+      scale: dest.w / Math.max(tpl.bbox.w, 1e-6),
+      placed_at: new Date().toISOString(),
+    },
+    handAuthored: false,
   };
   interior.score = scoreInterior(interior, unit.polygon);
   return interior;

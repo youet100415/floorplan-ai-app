@@ -5,3 +5,5 @@ export * from "./diagrams";
 export * from "./agent";
 export * from "./authoring";
 export * from "./furnitureCatalog";
+export * from "./validateUnit";
+export * from "./spaceGraph";

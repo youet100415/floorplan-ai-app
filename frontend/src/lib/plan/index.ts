@@ -37,3 +37,4 @@ export {
 export * from "./openings";
 export * from "./wall-join";
 export * from "./bridge";
+export * from "./spaceGraph";

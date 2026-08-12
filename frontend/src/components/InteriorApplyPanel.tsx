@@ -1,10 +1,11 @@
 "use client";
 
-/** 내부 평면 적용 전용 패널 — 저장본을 유닛에 끼움. */
+/** 유닛 배치 패널 — 라이브러리 원본 → 프로젝트 인스턴스 적용. */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import AIAgentChat from "@/components/AIAgentChat";
 import type { AgentMessage } from "@/utils/interior/agent";
+import { scoreTemplateMatch } from "@/utils/interior/validateUnit";
 import { seriesColor, type Mode } from "@/utils/palette";
 import type { DoorType, Plan, UnitInterior, UnitTemplate } from "@/utils/types";
 
@@ -57,9 +58,39 @@ export default function InteriorApplyPanel({
 }: Props) {
   const savedFirst = userTemplates[0]?.id ?? builtinTemplates[0]?.id ?? "";
   const [libTpl, setLibTpl] = useState(savedFirst);
+  const [libQuery, setLibQuery] = useState("");
   const selected = selectedId ? interiors[selectedId] : null;
+  const selectedUnit = selectedId ? plan.units.find((u) => u.id === selectedId) : null;
   const interiorsCount = Object.keys(interiors).length;
-  const all = [...userTemplates, ...builtinTemplates];
+  const all = useMemo(
+    () => [...userTemplates, ...builtinTemplates],
+    [userTemplates, builtinTemplates],
+  );
+
+  const ranked = useMemo(() => {
+    const q = libQuery.trim().toLowerCase();
+    let list = all;
+    if (q) {
+      list = all.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          (t.unitTypeHint ?? "").toLowerCase().includes(q) ||
+          (t.classification?.tags ?? []).some((tag) => tag.toLowerCase().includes(q)),
+      );
+    }
+    if (!selectedUnit) {
+      return list.map((t) => ({ t, score: null as number | null, reasons: [] as string[] }));
+    }
+    return list
+      .map((t) => {
+        const m = scoreTemplateMatch(
+          { type: selectedUnit.type, area: selectedUnit.area },
+          t,
+        );
+        return { t, score: m.score, reasons: m.reasons };
+      })
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  }, [all, libQuery, selectedUnit]);
 
   return (
     <aside className="sidebar panel interiorPanel">
@@ -80,34 +111,68 @@ export default function InteriorApplyPanel({
 
       <div className="panelBody">
         <section>
-          <h2>적용할 내부 평면</h2>
+          <h2>유닛 라이브러리 (원본)</h2>
+          <p className="note">
+            라이브러리 유닛은 원본입니다. 적용 시 <strong>프로젝트용 복제본</strong>이
+            만들어지며, 배치 후 편집해도 원본은 바뀌지 않습니다.
+          </p>
+          <label className="ctl">
+            <span className="ctlHead">검색 · 필터</span>
+            <input
+              className="fullSelect"
+              value={libQuery}
+              placeholder="이름 · 타입 · 태그"
+              onChange={(e) => setLibQuery(e.target.value)}
+            />
+          </label>
+          {selectedUnit && (
+            <p className="note">
+              선택 존 <strong>{selectedUnit.id}</strong> ({selectedUnit.type} ·{" "}
+              {selectedUnit.area.toFixed(0)}㎡) 기준 추천 정렬
+            </p>
+          )}
           {userTemplates.length === 0 && (
             <p className="note warn">
               직접 만든 모듈이 없습니다. 「유닛 에디터」에서 그리고 저장하세요.
             </p>
           )}
           <div className="tplCards">
-            {all.map((t) => (
+            {ranked.map(({ t, score, reasons }) => {
+              const blocked = t.validation?.placeable === false;
+              return (
               <button
                 key={t.id}
                 type="button"
                 className={`tplCard${libTpl === t.id ? " on" : ""}`}
-                disabled={busy}
+                disabled={busy || blocked}
+                title={
+                  blocked
+                    ? "배치 불가 — 유닛 에디터에서 수정·재저장"
+                    : reasons.length
+                      ? reasons.join(" · ")
+                      : undefined
+                }
                 onClick={() => setLibTpl(t.id)}
               >
                 <strong>
                   {t.name}
-                  {t.id.startsWith("user-") ? " · 내 저장" : " · 기본"}
+                  {t.id.startsWith("user-") ? " · 내 모듈" : " · 기본"}
+                  {score != null ? ` · 추천 ${score}` : ""}
                 </strong>
                 <em>
                   {t.bbox.w.toFixed(1)}×{t.bbox.d.toFixed(1)} m
                   {t.unitTypeHint ? ` · ${t.unitTypeHint}` : ""}
+                  {t.status ? ` · ${t.status}` : ""}
                 </em>
                 <span>
                   {t.rooms.length}실 · 문 {t.doors.length}
+                  {t.classification?.object_summary?.length
+                    ? ` · ${t.classification.object_summary.slice(0, 3).join(",")}`
+                    : ""}
+                  {blocked ? " · 배치 불가" : ""}
                 </span>
               </button>
-            ))}
+            );})}
           </div>
 
           <div className="drawRow" style={{ marginTop: 12 }}>
@@ -117,7 +182,7 @@ export default function InteriorApplyPanel({
               disabled={busy || !libTpl}
               onClick={() => onApplyTemplate(libTpl, "selected")}
             >
-              선택 유닛에 적용
+              선택 존에 배치(복제)
             </button>
           </div>
           <div className="drawRow" style={{ marginTop: 6 }}>
@@ -193,29 +258,69 @@ export default function InteriorApplyPanel({
           </ul>
         </section>
 
-        {selected?.score && (
+        {selectedUnit && !selected && (
           <section>
-            <h2>선택 유닛 점수</h2>
-            <div className="scoreGrid">
-              <div>
-                <span>종합</span>
-                <strong>{selected.score.total}%</strong>
-              </div>
-              <div>
-                <span>C / A / D</span>
-                <strong>
-                  {selected.score.compliance}/{selected.score.adaptivity}/
-                  {selected.score.daylight}
-                </strong>
-              </div>
-            </div>
-            <ul className="miniChecks">
-              {selected.score.checks.slice(0, 6).map((c, i) => (
-                <li key={i} className={c.level}>
-                  {c.message}
-                </li>
-              ))}
-            </ul>
+            <h2>선택 조닝 영역</h2>
+            <p className="note">
+              용도 <strong>{selectedUnit.type}</strong> · 면적{" "}
+              {selectedUnit.area.toFixed(1)}㎡
+              <br />
+              라이브러리에서 후보를 고른 뒤 「선택 존에 배치」를 누르세요.
+              <br />
+              <em>분류·추천 점수</em>는 용도·면적·치수 기반이며 모델 학습 데이터와는 별개입니다.
+            </p>
+          </section>
+        )}
+
+        {selected && (
+          <section>
+            <h2>배치 인스턴스 속성</h2>
+            {selected.project_instance ? (
+              <p className="note">
+                원본 라이브러리:{" "}
+                <strong>{selected.source_unit_id ?? selected.templateId}</strong>
+                <br />
+                인스턴스 ID: {selected.project_instance.instance_id}
+                <br />
+                라이브러리 버전: {selected.project_instance.library_version}
+                <br />
+                회전 {selected.project_instance.rotation_deg}° · 반전{" "}
+                {selected.project_instance.mirrored ? "Y" : "N"} · 스케일{" "}
+                {selected.project_instance.scale.toFixed(2)}
+                <br />
+                배치 시각: {new Date(selected.project_instance.placed_at).toLocaleString("ko-KR")}
+              </p>
+            ) : (
+              <p className="note">
+                원본: {selected.source_unit_id ?? selected.templateId ?? "—"} (인스턴스 메타 없음)
+              </p>
+            )}
+            {selected.score ? (
+              <>
+                <div className="scoreGrid">
+                  <div>
+                    <span>종합</span>
+                    <strong>{selected.score.total}%</strong>
+                  </div>
+                  <div>
+                    <span>C / A / D</span>
+                    <strong>
+                      {selected.score.compliance}/{selected.score.adaptivity}/
+                      {selected.score.daylight}
+                    </strong>
+                  </div>
+                </div>
+                <ul className="miniChecks">
+                  {selected.score.checks.slice(0, 6).map((c, i) => (
+                    <li key={i} className={c.level}>
+                      {c.message}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="note">배치됨 · 점수 없음</p>
+            )}
           </section>
         )}
 

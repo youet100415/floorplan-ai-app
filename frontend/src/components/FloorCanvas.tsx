@@ -41,7 +41,15 @@ import {
   pathPoints,
   toggleVertexRole,
 } from "@/utils/path";
-import { CHROME, type Mode, STATUS, rampColor, seriesColor, withAlpha } from "@/utils/palette";
+import {
+  CHROME,
+  WALL,
+  type Mode,
+  STATUS,
+  rampColor,
+  seriesColor,
+  withAlpha,
+} from "@/utils/palette";
 import {
   clampWallShift,
   findSharedWalls,
@@ -704,24 +712,26 @@ export default function FloorCanvas({
       ctx.fillStyle = mode === "light" ? "#ffffff" : "#111110";
       ctx.fill();
 
-      // ---- 세대
+      // ---- 세대 (채움은 타입 힌트, 벽 윤곽은 저톤 그레이)
+      const wallTone = WALL[mode];
       for (const u of plan.units) {
         const base = overlays.travel
           ? rampColor((u.travel_distance ?? 0) / Math.max(maxTravel, 1))
           : seriesColor(mode, u.type_index);
         path(u.polygon);
-        ctx.fillStyle = withAlpha(base, mode === "light" ? 0.28 : 0.34);
+        ctx.fillStyle = withAlpha(base, mode === "light" ? 0.18 : 0.22);
         ctx.fill();
-        // 인접 세대 사이가 붙어 보이지 않도록 면 위에 같은 색 실선 테두리
+        // 벽체 윤곽: 참고 화면처럼 중회색 저톤 (원색 스트로크 지양)
         const multi = selectedUnitIds.includes(u.id);
         const hi = highlightedUnitIds.includes(u.id);
-        ctx.strokeStyle = hi ? "#2b56f0" : base;
+        const selected = u.id === selectedId || multi;
+        ctx.strokeStyle = hi || selected ? wallTone.active : wallTone.fill;
         ctx.lineWidth =
-          u.id === selectedId || multi ? 3 : u.id === hoverId ? 2.5 : hi ? 2.5 : 1.5;
+          selected ? 2.75 : u.id === hoverId ? 2.25 : hi ? 2.25 : 1.75;
         ctx.stroke();
         if (hi) {
           path(u.polygon);
-          ctx.fillStyle = "rgba(43, 86, 240, 0.12)";
+          ctx.fillStyle = withAlpha(wallTone.active, 0.1);
           ctx.fill();
         }
       }
@@ -744,9 +754,12 @@ export default function FloorCanvas({
           if (overlays.interiors) {
             for (const r of it.rooms) {
               path(r.polygon);
-              ctx.fillStyle = withAlpha(seriesColor(mode, r.kind === "living" ? 0 : r.kind === "bedroom" ? 2 : 1), 0.2);
+              ctx.fillStyle = withAlpha(
+                seriesColor(mode, r.kind === "living" ? 0 : r.kind === "bedroom" ? 2 : 1),
+                mode === "light" ? 0.14 : 0.18,
+              );
               ctx.fill();
-              ctx.strokeStyle = withAlpha(chrome.ink, 0.35);
+              ctx.strokeStyle = withAlpha(WALL[mode].stroke, 0.75);
               ctx.lineWidth = 1;
               ctx.stroke();
               if (overlays.labels && r.polygon.length >= 3) {
@@ -843,9 +856,9 @@ export default function FloorCanvas({
       // ---- 복도
       for (const poly of plan.corridor.polygons) {
         path(poly);
-        ctx.fillStyle = mode === "light" ? "#eceae4" : "#232322";
+        ctx.fillStyle = mode === "light" ? "#e8e8e4" : "#2a2a28";
         ctx.fill();
-        ctx.strokeStyle = chrome.axis;
+        ctx.strokeStyle = withAlpha(WALL[mode].stroke, 0.55);
         ctx.lineWidth = 1;
         ctx.stroke();
       }
@@ -853,9 +866,9 @@ export default function FloorCanvas({
       // ---- 코어
       for (const c of plan.cores) {
         path(c.polygon);
-        ctx.fillStyle = mode === "light" ? "#c3c2b7" : "#4a4a46";
+        ctx.fillStyle = mode === "light" ? "#b8b8b2" : "#454540";
         ctx.fill();
-        ctx.strokeStyle = chrome.inkSecondary;
+        ctx.strokeStyle = WALL[mode].stroke;
         ctx.lineWidth = 1.5;
         ctx.stroke();
         const [cx, cy] = toScreen([
@@ -882,9 +895,9 @@ export default function FloorCanvas({
         ctx.setLineDash([]);
       }
 
-      // ---- 외곽선
+      // ---- 외곽선 (저톤 벽체)
       path(plan.boundary);
-      ctx.strokeStyle = chrome.ink;
+      ctx.strokeStyle = WALL[mode].exterior;
       ctx.lineWidth = 2.5;
       ctx.stroke();
 

@@ -23,9 +23,15 @@ import {
 import {
   buildOpeningSymbol,
   getOpeningPlacement,
+  isDoor,
   presetOf,
   type OpeningPlacement,
 } from "@/lib/plan/openings";
+import {
+  buildSpaceGraph,
+  getConnectionPath,
+  toggleOpeningState,
+} from "@/lib/plan/spaceGraph";
 import type {
   Opening,
   OpeningKind,
@@ -47,6 +53,8 @@ interface Props {
   className?: string;
   /** 읽기 전용 */
   readOnly?: boolean;
+  /** 공간 센터·문 연결 그래프 표시 */
+  showSpaceGraph?: boolean;
 }
 
 export default function PlanDocCanvas({
@@ -56,6 +64,7 @@ export default function PlanDocCanvas({
   openingKind = "door-single",
   className,
   readOnly = false,
+  showSpaceGraph = true,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const settings = defaultSettings();
@@ -66,12 +75,18 @@ export default function PlanDocCanvas({
   const [selection, setSelection] = useState<{ kind: string; id: string } | null>(null);
   /** 우클릭 작도 메뉴 (호스트 기준 px) */
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  /** 공간 센터 hover (ZIP 예시 인터랙션) */
+  const [hoverSpaceId, setHoverSpaceId] = useState<string | null>(null);
   const panRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   const fitted = useRef(false);
   /** 벽 연속 작도 중 추가한 벽 id — 마지막 구간 되돌리기용 */
   const wallChainRef = useRef<string[]>([]);
 
   const wallJoin = useMemo(() => computeWallPolygons(doc.walls), [doc.walls]);
+  const spaceGraph = useMemo(
+    () => (showSpaceGraph ? buildSpaceGraph(doc) : { nodes: [], edges: [] }),
+    [doc, showSpaceGraph],
+  );
 
   // 첫 로드 시 문서에 맞춤
   useEffect(() => {
@@ -320,6 +335,16 @@ export default function PlanDocCanvas({
       });
       if (hitO) {
         setSelection({ kind: "opening", id: hitO.id });
+        // 문/개구부: 클릭 시 개폐 토글 (closed ↔ open)
+        if (isDoor(hitO.kind) || hitO.kind === "opening") {
+          const next = toggleOpeningState(hitO.state);
+          patchDoc((d) => ({
+            ...d,
+            openings: d.openings.map((o) =>
+              o.id === hitO.id ? { ...o, state: next } : o,
+            ),
+          }));
+        }
         return;
       }
       const hitW = pickWall(world, doc.walls, 12 / view.scale);
@@ -519,9 +544,18 @@ export default function PlanDocCanvas({
                 stroke={active ? "var(--plan-selection)" : "var(--plan-zone-stroke)"}
                 strokeWidth={active ? 2 : 1}
               />
-              <text x={c.x} y={c.y} className="planZoneLabel" textAnchor="middle" dominantBaseline="middle">
-                {z.name}
-              </text>
+              {/* 공간 그래프가 라벨을 그리면 존 이름 중복 생략 */}
+              {!showSpaceGraph && (
+                <text
+                  x={c.x}
+                  y={c.y}
+                  className="planZoneLabel"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                >
+                  {z.name}
+                </text>
+              )}
             </g>
           );
         })}
@@ -543,13 +577,13 @@ export default function PlanDocCanvas({
           );
         })}
 
-        {/* openings */}
+        {/* openings — state 로 문짝 스윙 (buildOpeningSymbol) */}
         {openingPlacements.map(({ o, pl }) => {
           const active = selection?.kind === "opening" && selection.id === o.id;
           const sym = buildOpeningSymbol(pl, o.kind, {
             flip: o.flip,
             frame: o.frame,
-            state: o.state,
+            state: o.state ?? "open",
           });
           const polyPts = (pts: Point[]) =>
             pts
@@ -559,13 +593,28 @@ export default function PlanDocCanvas({
               })
               .join(" ");
           return (
-            <g key={o.id} opacity={active ? 1 : 0.95}>
+            <g
+              key={o.id}
+              opacity={active ? 1 : 0.95}
+              style={{
+                cursor:
+                  tool === "select" && (isDoor(o.kind) || o.kind === "opening")
+                    ? "pointer"
+                    : undefined,
+              }}
+            >
               {sym.fills.map((f, i) => (
                 <polygon
                   key={`f-${i}`}
                   points={polyPts(f.pts)}
-                  fill={f.role === "frame" ? "var(--plan-wall)" : "var(--plan-bg)"}
-                  stroke="var(--plan-wall-stroke)"
+                  fill={
+                    f.role === "frame"
+                      ? "var(--plan-wall)"
+                      : f.role === "leaf"
+                        ? "var(--plan-door-leaf, #f0f0ee)"
+                        : "var(--plan-bg)"
+                  }
+                  stroke={active ? "var(--plan-selection)" : "var(--plan-wall-stroke)"}
                   strokeWidth={1}
                 />
               ))}
@@ -576,6 +625,8 @@ export default function PlanDocCanvas({
                   fill="none"
                   stroke={active ? "var(--plan-selection)" : "var(--plan-draft)"}
                   strokeWidth={part.weight ?? 1.25}
+                  strokeDasharray={part.dashed ? "4 3" : undefined}
+                  strokeOpacity={part.dashed ? 0.55 : 1}
                 />
               ))}
               {sym.jambs.map((j, i) => (
@@ -592,6 +643,107 @@ export default function PlanDocCanvas({
             </g>
           );
         })}
+
+        {/* 공간 그래프: 센터 + 문 경유 연결선 (항상 최상단) */}
+        {showSpaceGraph && spaceGraph.nodes.length > 0 && (
+          <g className="spaceGraph" style={{ pointerEvents: "none" }}>
+            {/* 연결선 먼저 */}
+            <g className="space-connections">
+              {spaceGraph.edges.map((edge) => {
+                const from = spaceGraph.nodes.find((n) => n.id === edge.from);
+                const to = spaceGraph.nodes.find((n) => n.id === edge.to);
+                if (!from || !to) return null;
+                const path = getConnectionPath(from, to, edge.via ?? null);
+                const screenPts = path.map((p) => S(p));
+                const d = screenPts
+                  .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+                  .join(" ");
+                const mid = edge.via ? S(edge.via) : null;
+                return (
+                  <g key={edge.id}>
+                    {/* 배경 흰 선 — 벽 위에서도 보이게 */}
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke="#ffffff"
+                      strokeWidth={4}
+                      strokeOpacity={0.9}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke="#007AFF"
+                      strokeWidth={2.25}
+                      strokeOpacity={0.85}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                    {mid && (
+                      <>
+                        <circle cx={mid.x} cy={mid.y} r={5} fill="#fff" />
+                        <circle cx={mid.x} cy={mid.y} r={3.5} fill="#007AFF" />
+                      </>
+                    )}
+                  </g>
+                );
+              })}
+            </g>
+
+            {/* 센터 포인트 */}
+            <g className="space-centers">
+              {spaceGraph.nodes.map((node) => {
+                const c = S(node.center);
+                const hovered = hoverSpaceId === node.id;
+                const active =
+                  hovered ||
+                  (selection?.kind === "zone" && selection.id === node.id);
+                const r = active ? 9 : 7;
+                return (
+                  <g key={node.id} className="spaceGraphNode">
+                    <circle
+                      cx={c.x}
+                      cy={c.y}
+                      r={hovered ? 16 : 13}
+                      fill="rgba(0,122,255,0.15)"
+                    />
+                    <circle
+                      cx={c.x}
+                      cy={c.y}
+                      r={r}
+                      fill="#ffffff"
+                      stroke="#007AFF"
+                      strokeWidth={2.5}
+                    />
+                    <circle cx={c.x} cy={c.y} r={2.5} fill="#007AFF" />
+                    <text
+                      x={c.x}
+                      y={c.y - 16}
+                      textAnchor="middle"
+                      fill="#1d1d1f"
+                      fontSize={12}
+                      fontWeight={700}
+                      style={{ userSelect: "none" }}
+                    >
+                      {node.name}
+                    </text>
+                    <text
+                      x={c.x}
+                      y={c.y + 22}
+                      textAnchor="middle"
+                      fill="#6e6e73"
+                      fontSize={11}
+                      style={{ userSelect: "none" }}
+                    >
+                      {node.area.toFixed(1)}m²
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          </g>
+        )}
 
         {ghost &&
           (() => {
@@ -667,7 +819,18 @@ export default function PlanDocCanvas({
       <div className="planDocHud">
         <span>
           {tool} · scale {view.scale.toFixed(0)} px/m
+          {showSpaceGraph
+            ? ` · 공간 ${spaceGraph.nodes.length} · 연결 ${spaceGraph.edges.length}${
+                spaceGraph.nodes.some((n) => !n.fromZone) ? " · 벽자동" : ""
+              }`
+            : ""}
         </span>
+        {tool === "select" && (
+          <span>문 클릭 → 열림/닫힘 · Delete 삭제</span>
+        )}
+        {showSpaceGraph && spaceGraph.nodes.length === 0 && (
+          <span>실(존)을 그리거나 닫힌 벽으로 방을 나누세요</span>
+        )}
         {draftStart && (tool === "wall" || tool === "line") && (
           <span>
             {formatMeters(dist(draftStart, cursor))} · {angleDeg(draftStart, cursor).toFixed(0)}°

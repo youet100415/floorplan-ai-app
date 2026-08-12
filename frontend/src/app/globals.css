@@ -318,6 +318,30 @@ button.stage2Cta {
   fill: var(--ink-2);
   pointer-events: none;
 }
+.spaceGraphLabel {
+  pointer-events: none;
+  fill: var(--ink, #1d1d1f);
+}
+.spaceGraphArea {
+  pointer-events: none;
+  fill: var(--muted, #86868b);
+}
+.spaceGraph .space-connections {
+  pointer-events: none;
+}
+.spaceGraphNode circle {
+  transition: r 0.15s ease, filter 0.15s ease;
+}
+:root {
+  --plan-door-leaf: #f0f0ee;
+  --plan-label: #1d1d1f;
+  --plan-label-muted: #86868b;
+}
+:root[data-theme="dark"] {
+  --plan-door-leaf: #2a2a28;
+  --plan-label: #e8e6dc;
+  --plan-label-muted: #a0a098;
+}
 .planToolbar {
   flex: 0 0 auto;
   display: flex;
@@ -348,36 +372,37 @@ button.stage2Cta {
 }
 
 :root {
+  /* 벽체 저톤: 참고 화면의 중회색 포셰 (~#989898) */
   --plan-bg: #f4f4f1;
   --plan-grid: rgba(0, 0, 0, 0.06);
   --plan-axis: rgba(0, 0, 0, 0.12);
-  --plan-wall: #2a2a28;
-  --plan-wall-active: #1a4a8a;
-  --plan-wall-stroke: #1a1a18;
-  --plan-wall-fill: #3a3a36;
-  --plan-zone-fill: rgba(90, 140, 200, 0.14);
-  --plan-zone-stroke: rgba(60, 100, 160, 0.45);
-  --plan-corridor-fill: rgba(180, 180, 170, 0.2);
-  --plan-selection: #2a78d6;
-  --plan-selection-fill: rgba(42, 120, 214, 0.18);
-  --plan-draft: #2a78d6;
-  --plan-site: rgba(0, 0, 0, 0.35);
-  --plan-divider: rgba(0, 0, 0, 0.35);
+  --plan-wall: #8f8f8b;
+  --plan-wall-active: #5a7aaa;
+  --plan-wall-stroke: #6a6a66;
+  --plan-wall-fill: #969692;
+  --plan-zone-fill: rgba(125, 95, 98, 0.14);
+  --plan-zone-stroke: rgba(100, 80, 84, 0.35);
+  --plan-corridor-fill: rgba(180, 180, 170, 0.22);
+  --plan-selection: #6a8ab0;
+  --plan-selection-fill: rgba(90, 120, 160, 0.16);
+  --plan-draft: #6a8ab0;
+  --plan-site: rgba(80, 80, 76, 0.4);
+  --plan-divider: rgba(80, 80, 76, 0.35);
 }
 :root[data-theme="dark"] {
   --plan-bg: #141413;
   --plan-grid: rgba(255, 255, 255, 0.06);
   --plan-axis: rgba(255, 255, 255, 0.12);
-  --plan-wall: #c8c6bc;
-  --plan-wall-active: #6db0ff;
-  --plan-wall-stroke: #e8e6dc;
-  --plan-wall-fill: #b0aea4;
-  --plan-zone-fill: rgba(100, 160, 230, 0.16);
-  --plan-zone-stroke: rgba(140, 190, 255, 0.4);
-  --plan-selection: #5aa0f0;
-  --plan-selection-fill: rgba(90, 160, 240, 0.2);
-  --plan-draft: #5aa0f0;
-  --plan-site: rgba(255, 255, 255, 0.35);
+  --plan-wall: #7a7a74;
+  --plan-wall-active: #7a9ec8;
+  --plan-wall-stroke: #a0a098;
+  --plan-wall-fill: #6e6e68;
+  --plan-zone-fill: rgba(140, 120, 130, 0.16);
+  --plan-zone-stroke: rgba(160, 140, 150, 0.35);
+  --plan-selection: #7a9ec8;
+  --plan-selection-fill: rgba(120, 150, 180, 0.18);
+  --plan-draft: #7a9ec8;
+  --plan-site: rgba(200, 200, 190, 0.35);
 }
 
 .tplCards {

@@ -300,16 +300,31 @@ export function blankAuthorDocument(
     [0, d],
   ];
   const storyId = "story-1";
+  const site = poly.map(ptToPoint);
+  // 외곽 안쪽 전체 존 1개 — 공간 그래프 센터가 바로 보이도록
+  const pad = Math.min(wallThickness * 0.6, 0.15);
+  const innerZone: Zone = {
+    id: "zone-whole",
+    name: "전체",
+    kind: "room",
+    storyId,
+    points: [
+      { x: pad, y: pad },
+      { x: w - pad, y: pad },
+      { x: w - pad, y: d - pad },
+      { x: pad, y: d - pad },
+    ],
+  };
   return {
     name,
     walls: polygonToWalls(poly, wallThickness, storyId, "auth-w"),
     openings: [],
-    zones: [],
+    zones: [innerZone],
     dividers: [],
     lines: [],
     dimensions: [],
     stories: [{ id: storyId, name: "1층", elevation: 0, height: DEFAULT_STORY_HEIGHT }],
-    siteBoundary: poly.map(ptToPoint),
+    siteBoundary: site,
   };
 }
 
@@ -385,34 +400,67 @@ export function planDocumentToTemplate(
     });
 
   const entry = doors[0];
+  const finalRooms =
+    rooms.length > 0
+      ? rooms
+      : [
+          {
+            id: "whole",
+            name: "전체",
+            kind: "other" as RoomKind,
+            polygon: [
+              [0, 0],
+              [bw, 0],
+              [bw, bd],
+              [0, bd],
+            ] as Pt[],
+          },
+        ];
+
+  const now = new Date().toISOString();
+  const connection_points = doors.map((d) => ({
+    connection_id: d.id,
+    type: "door" as const,
+    at: d.at,
+    category: d.category,
+  }));
+
   return {
+    schema_version: "1.1.0",
+    unit: "m",
     id: `user-${Date.now().toString(36)}`,
     name,
     unitTypeHint: unitTypeHint || undefined,
     version: 1,
+    library_version: 1,
+    status: "draft",
+    coordinate_system: "local_xy_meters_bottom_left",
     bbox: { w: bw, d: bd },
+    anchor_point: { type: "bottom_left", x: 0, y: 0 },
     entry: {
       side: "south",
       offset: entry?.at[0] ?? bw / 2,
       width: entry?.width ?? 0.9,
     },
-    rooms:
-      rooms.length > 0
-        ? rooms
-        : [
-            {
-              id: "whole",
-              name: "전체",
-              kind: "other" as RoomKind,
-              polygon: [
-                [0, 0],
-                [bw, 0],
-                [bw, bd],
-                [0, bd],
-              ],
-            },
-          ],
+    rooms: finalRooms,
     doors,
+    connection_points,
+    placement_constraints: {
+      zone_categories: unitTypeHint
+        ? [unitTypeHint, unitTypeHint.toLowerCase()]
+        : finalRooms.map((r) => r.kind),
+      min_zone_area_sqm: Math.max(1, (bw * bd) * 0.5),
+    },
+    classification: {
+      tags: [name, unitTypeHint ?? ""].filter(Boolean),
+      room_kinds: [...new Set(finalRooms.map((r) => r.kind))],
+      object_summary: [
+        ...finalRooms.map((r) => r.name),
+        ...doors.map((d) => d.category),
+      ],
+    },
+    created_at: now,
+    updated_at: now,
   };
 }
 

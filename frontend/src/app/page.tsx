@@ -47,6 +47,8 @@ import {
   removeRoom,
   runAgentLocal,
   saveUserTemplate,
+  validatePlanDocument,
+  validateUnitTemplate,
   type AgentMessage,
 } from "@/utils/interior";
 import { asCorners } from "@/utils/path";
@@ -336,6 +338,12 @@ export default function EditorPage() {
       const tpl =
         getTemplate(templateId) ?? userTemplates.find((t) => t.id === templateId);
       if (!tpl) return;
+      if (tpl.validation?.placeable === false) {
+        setError(
+          `「${tpl.name}」은(는) 배치 불가 상태입니다. 유닛 에디터에서 오류를 수정한 뒤 다시 저장하세요.`,
+        );
+        return;
+      }
       const targets =
         scope === "all"
           ? plan.units
@@ -543,28 +551,64 @@ export default function EditorPage() {
 
   const saveAuthorToLibrary = useCallback(() => {
     const name = authorSaveName.trim() || `유닛 모듈 ${new Date().toLocaleString("ko-KR")}`;
-    const tpl = planDocumentToTemplate(authorDoc, name, authorTypeHint.trim() || undefined);
-    if (authorDoc.zones.length === 0 && authorDoc.openings.length === 0) {
-      setError("실(존) 또는 문을 그린 뒤 저장하세요.");
+    const docCheck = validatePlanDocument({ ...authorDoc, name });
+    // 외곽 자체가 없으면 초안 저장도 불가
+    if (!authorDoc.siteBoundary || authorDoc.siteBoundary.length < 3) {
+      setError(
+        `저장 불가: ${docCheck.errors.map((e) => e.message).join(" · ") || "외곽선이 필요합니다."}`,
+      );
       return;
     }
+    let tpl = planDocumentToTemplate(authorDoc, name, authorTypeHint.trim() || undefined);
+    const tplCheck = validateUnitTemplate(tpl);
+    const validation = {
+      is_valid: docCheck.is_valid && tplCheck.is_valid,
+      placeable: docCheck.placeable && tplCheck.placeable,
+      errors: [...docCheck.errors, ...tplCheck.errors],
+      warnings: [...docCheck.warnings, ...tplCheck.warnings],
+      validated_at: new Date().toISOString(),
+    };
+    // 명세: 오류 있어도 draft 저장 가능. placeable/published 만 엄격 게이트.
+    tpl = {
+      ...tpl,
+      validation,
+      status: validation.placeable ? (validation.is_valid ? "published" : "valid") : "draft",
+    };
     const next = saveUserTemplate(tpl);
     setUserTemplates(next);
     setAuthorSaveName("");
-    setError(null);
+    const statusNote = !validation.placeable
+      ? `초안(draft) 저장 · 배치 불가 · 오류 ${validation.errors.length}건`
+      : validation.warnings.length > 0
+        ? `경고 ${validation.warnings.length}건 · 배치 가능(${tpl.status})`
+        : "검증 통과 · 배치 가능(published)";
+    setError(
+      !validation.placeable
+        ? `라이브러리에 초안으로 저장됨 (배치 불가): ${validation.errors
+            .slice(0, 3)
+            .map((e) => e.message)
+            .join(" · ")}`
+        : null,
+    );
     setAgentMessages((prev) => [
       ...prev,
       {
         id: agentId(),
         role: "agent",
-        text: `유닛 모듈 저장: 「${tpl.name}」`,
+        text: `유닛 라이브러리 저장: 「${tpl.name}」`,
         details: [
-          `${tpl.rooms.length}실 · 문 ${tpl.doors.length}`,
-          "평면 완성 → 유닛 배치에서 적용하세요.",
+          `${tpl.rooms.length}실 · 문 ${tpl.doors.length} · ${statusNote}`,
+          "평면 완성 → 유닛 배치에서 모듈을 선택해 적용하세요.",
+          ...validation.errors.slice(0, 3).map((e) => `✗ ${e.message}`),
+          ...validation.warnings.slice(0, 3).map((w) => `⚠ ${w.message}`),
         ],
         summaryCard: {
           title: "Saved to Unit Library",
-          changes: [tpl.name, `${tpl.bbox.w.toFixed(1)}×${tpl.bbox.d.toFixed(1)} m`],
+          changes: [
+            tpl.name,
+            `${tpl.bbox.w.toFixed(1)}×${tpl.bbox.d.toFixed(1)} m`,
+            `status: ${tpl.status}`,
+          ],
           unitIds: [],
         },
       },
