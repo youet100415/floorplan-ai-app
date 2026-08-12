@@ -72,8 +72,68 @@ RESIDENTIAL = SpaceProgram(
     expansion_order=("living", "bedroom", "storage"),
 )
 
+KOREAN_RESTAURANT = SpaceProgram(
+    id="korean_restaurant",
+    name="한식당",
+    rooms=(
+        SpaceRule("entrance", "입구/대기", True, 4, 8, 20, 1.8, (0.04, 0.08)),
+        SpaceRule("dining", "홀 좌석", True, 35, 60, 180, 3.0, (0.35, 0.55), True),
+        SpaceRule("kitchen", "주방", True, 18, 30, 70, 3.0, (0.15, 0.25), True),
+        SpaceRule("bathroom", "화장실", True, 6, 10, 25, 1.5, (0.05, 0.10)),
+        SpaceRule("storage", "창고/냉장", True, 6, 12, 30, 1.8, (0.06, 0.12)),
+    ),
+    relationships=(
+        RelationshipRule("entrance", "dining", "must_connect", "hard"),
+        RelationshipRule("dining", "kitchen", "prefer_adjacent"),
+        RelationshipRule("kitchen", "storage", "must_connect", "hard"),
+        RelationshipRule("bathroom", "dining", "avoid_visible"),
+    ),
+    expansion_order=("dining", "kitchen", "storage"),
+)
 
-PROGRAMS: dict[str, SpaceProgram] = {RESIDENTIAL.id: RESIDENTIAL}
+JAPANESE_RESTAURANT = SpaceProgram(
+    id="japanese_restaurant",
+    name="일식당",
+    rooms=(
+        SpaceRule("entrance", "호스트/대기", True, 4, 8, 18, 1.8, (0.04, 0.08)),
+        SpaceRule("dining", "다이닝/룸", True, 30, 55, 160, 2.8, (0.30, 0.50), True),
+        SpaceRule("kitchen", "오픈/후방 주방", True, 16, 28, 60, 2.8, (0.14, 0.24), True),
+        SpaceRule("bathroom", "화장실", True, 6, 10, 24, 1.5, (0.05, 0.10)),
+        SpaceRule("storage", "창고/세척", True, 6, 12, 28, 1.8, (0.06, 0.12)),
+    ),
+    relationships=(
+        RelationshipRule("entrance", "dining", "must_connect", "hard"),
+        RelationshipRule("dining", "kitchen", "prefer_adjacent"),
+        RelationshipRule("kitchen", "storage", "must_connect", "hard"),
+        RelationshipRule("bathroom", "dining", "avoid_visible"),
+    ),
+    expansion_order=("dining", "kitchen", "storage"),
+)
+
+OFFICE = SpaceProgram(
+    id="office",
+    name="오피스",
+    rooms=(
+        SpaceRule("entrance", "리셉션/대기", True, 6, 12, 30, 2.0, (0.05, 0.10)),
+        SpaceRule("living", "업무 좌석", True, 35, 60, 220, 3.0, (0.35, 0.60), True),
+        SpaceRule("meeting", "회의실", True, 10, 18, 50, 2.5, (0.10, 0.20), True),
+        SpaceRule("bathroom", "화장실", True, 6, 10, 25, 1.5, (0.05, 0.10)),
+        SpaceRule("storage", "탕비/수납", True, 5, 10, 25, 1.5, (0.05, 0.10)),
+    ),
+    relationships=(
+        RelationshipRule("entrance", "living", "must_connect", "hard"),
+        RelationshipRule("living", "meeting", "prefer_adjacent"),
+        RelationshipRule("bathroom", "living", "avoid_visible"),
+        RelationshipRule("storage", "living", "prefer_adjacent"),
+    ),
+    expansion_order=("living", "meeting", "storage"),
+)
+
+
+PROGRAMS: dict[str, SpaceProgram] = {
+    program.id: program
+    for program in (RESIDENTIAL, KOREAN_RESTAURANT, JAPANESE_RESTAURANT, OFFICE)
+}
 
 
 def list_programs() -> list[dict]:
